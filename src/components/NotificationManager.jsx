@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
-  requestPermission, notifyAlert, notifyReport, hasPermission
+  requestPermission, notifyAlert, notifyNewReport, hasPermission
 } from '../services/notifications';
 
 const POLL_MS = 30_000;
@@ -94,17 +94,43 @@ export default function NotificationManager() {
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
+
+          /* ── Existing: new alert broadcast ── */
           if (msg.event === 'new_alert') {
             const a = msg.data;
-            // Prevent duplicate toast if poll already caught it
             if (lastAlertIdRef.current === a._id) return;
             lastAlertIdRef.current = a._id;
-            
             if (hasPermission()) notifyAlert(a);
             if (_showToast) _showToast({
                severity: a.severity,
                text: `${a.reportedBy?.role === 'admin' ? 'Admin' : 'Field Worker'} Alert: ${a.headline || a.type} — ${a.location}`,
                solutions: a.villageAdvisory?.solutions || a.solutions,
+            });
+          }
+
+          /* ── New: community / user report submitted ── */
+          if (msg.event === 'new_report') {
+            const r = msg.data;
+            if (_showToast) _showToast({
+              kind: 'report',
+              urgency: r.urgency,
+              text: `📋 New ${r.type} report in ${r.region} (${r.location})`,
+              subtext: r.description?.slice(0, 80) + (r.description?.length > 80 ? '…' : ''),
+              refId: r.refId,
+              previewImage: r.previewImage || null,
+              imageCount:   r.imageCount   || 0,
+            });
+            // Browser notification
+            if (hasPermission()) notifyNewReport(r);
+          }
+
+          /* ── New: report status changed ── */
+          if (msg.event === 'report_updated') {
+            const r = msg.data;
+            if (_showToast) _showToast({
+              kind: 'report_update',
+              text: `🔄 Report ${r.refId} status → ${r.status?.toUpperCase()}`,
+              urgency: r.riskLevel,
             });
           }
         } catch (_) {}

@@ -41,7 +41,7 @@ const Report = () => {
   const [error,     setError]     = useState('');
   const [form, setForm] = useState({
     type: '', region: '', location: '', urgency: '', description: '',
-    files: [], name: '', phone: '', email: '', anonymous: false,
+    files: [], imageData: [], name: '', phone: '', email: '', anonymous: false,
   });
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
@@ -73,6 +73,7 @@ const Report = () => {
           urgency:     form.urgency,
           description: form.description,
           files:       form.files,
+          imageData:   form.imageData,
           anonymous:   form.anonymous,
           name:        form.name,
           phone:       form.phone,
@@ -92,13 +93,39 @@ const Report = () => {
     }
   };
 
+  /* Read a File as a base64 DataURL */
+  function readAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /* Handle file selection: store names AND base64 for images */
+  async function handleFileChange(e) {
+    const picked = Array.from(e.target.files);
+    const names  = picked.map(f => f.name);
+    const images = picked.filter(f => f.type.startsWith('image/'));
+    let dataUrls = [];
+    try {
+      dataUrls = await Promise.all(images.map(readAsDataURL));
+    } catch (_) {}
+    setForm(f => ({
+      ...f,
+      files:     [...f.files, ...names],
+      imageData: [...f.imageData, ...dataUrls],
+    }));
+  }
+
   if (submitted) return (
     <div className="page-root rp-page">
       <div className="success-screen">
         <div className="success-icon"><CheckCircle size={64}/></div>
         <h2>Report Submitted!</h2>
         <p>Thank you for contributing to conservation. Your report has been assigned ID <strong>#{refId}</strong> and will be reviewed within 30 minutes.</p>
-        <button className="btn-primary-rp" onClick={() => { setSubmitted(false); setStep(0); setRefId(''); setForm({ type:'',region:'',location:'',urgency:'',description:'',files:[],name:'',phone:'',email:'',anonymous:false }); }}>
+        <button className="btn-primary-rp" onClick={() => { setSubmitted(false); setStep(0); setRefId(''); setForm({ type:'',region:'',location:'',urgency:'',description:'',files:[],imageData:[],name:'',phone:'',email:'',anonymous:false }); }}>
           Submit Another Report
         </button>
       </div>
@@ -219,16 +246,31 @@ const Report = () => {
                 <p>Click to upload or drag &amp; drop</p>
                 <span>PNG, JPG, MP4, PDF — Max 20MB each</span>
                 <input id="file-input" type="file" multiple hidden
-                  onChange={e => set('files', [...form.files, ...Array.from(e.target.files).map(f => f.name)])}/>
+                  accept="image/*,video/*,.pdf"
+                  onChange={handleFileChange}/>
               </div>
               {form.files.length > 0 && (
                 <div className="file-list">
-                  {form.files.map((f, i) => (
-                    <div key={i} className="file-item">
-                      <Camera size={14}/> {f}
-                      <button onClick={() => set('files', form.files.filter((_,j) => j!==i))}>×</button>
-                    </div>
-                  ))}
+                  {form.files.map((f, i) => {
+                    const preview = form.imageData.find((d, di) => di === i) ||
+                      form.imageData[i];
+                    return (
+                      <div key={i} className="file-item">
+                        {preview ? (
+                          <img src={preview} alt={f}
+                            style={{ width:36, height:36, objectFit:'cover', borderRadius:6, flexShrink:0 }}/>
+                        ) : (
+                          <Camera size={14}/>
+                        )}
+                        <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f}</span>
+                        <button onClick={() => setForm(fm => ({
+                          ...fm,
+                          files:     fm.files.filter((_,j) => j !== i),
+                          imageData: fm.imageData.filter((_,j) => j !== i),
+                        }))}>×</button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               <div className="anon-notice">
@@ -279,7 +321,8 @@ const Report = () => {
                 <div className="summary-row"><span>Region:</span><span>{form.region}</span></div>
                 <div className="summary-row"><span>Location:</span><span>{form.location}</span></div>
                 <div className="summary-row"><span>Urgency:</span><span>{form.urgency}</span></div>
-                <div className="summary-row"><span>Evidence:</span><span>{form.files.length} file(s)</span></div>
+                <div className="summary-row"><span>Evidence:</span><span>{form.files.length} file(s)
+                  {form.imageData.length > 0 && ` · ${form.imageData.length} image(s)`}</span></div>
               </div>
             </div>
           )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, LayerGroup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -6,7 +6,7 @@ import {
   AlertTriangle, ShieldAlert, Info, Search,
   Clock, MapPin, ChevronRight, X, CheckCircle, Siren,
   Copy, Check, MessageSquare, Shield, Lightbulb,
-  Users, RefreshCw, Bell,
+  Users, RefreshCw, Bell, FileText,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import './Alerts.css';
@@ -79,6 +79,153 @@ function timeAgo(iso) {
   if (s < 3600) return `${Math.floor(s/60)}m ago`;
   if (s < 86400) return `${Math.floor(s/3600)}h ago`;
   return `${Math.floor(s/86400)}d ago`;
+}
+
+/* ── Image lightbox ── */
+function ReportLightbox({ src, onClose }) {
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
+  return (
+    <div onClick={onClose} style={{
+      position:'fixed', inset:0, zIndex:99999,
+      background:'rgba(0,0,0,0.93)', cursor:'zoom-out',
+      display:'flex', alignItems:'center', justifyContent:'center',
+      animation:'lbFadeIn 0.2s ease',
+    }}>
+      <img src={src} alt="Report evidence" onClick={e=>e.stopPropagation()}
+        style={{ maxWidth:'90vw', maxHeight:'88vh', borderRadius:12,
+          boxShadow:'0 8px 40px rgba(0,0,0,0.9)',
+          animation:'lbZoom 0.25s cubic-bezier(0.16,1,0.3,1)',
+          cursor:'default',
+        }}
+      />
+      <button onClick={onClose} style={{
+        position:'fixed', top:18, right:22,
+        background:'rgba(255,255,255,0.1)', border:'none', borderRadius:'50%',
+        width:40, height:40, color:'#fff', fontSize:20, cursor:'pointer',
+        display:'flex', alignItems:'center', justifyContent:'center',
+        backdropFilter:'blur(8px)',
+      }}>✕</button>
+      <style>{`
+        @keyframes lbFadeIn { from{opacity:0} to{opacity:1} }
+        @keyframes lbZoom   { from{transform:scale(0.85)} to{transform:scale(1)} }
+      `}</style>
+    </div>
+  );
+}
+
+/* ── Report card (Community Reports tab) ── */
+const URGENCY_COLOR = {
+  'High — immediate risk to life or wildlife': '#ff4444',
+  'Medium — situation developing':              '#ffa500',
+  'Low — no immediate danger':                  '#4caf50',
+};
+const TYPE_EMOJI = { wildlife:'🐘', deforestation:'🌳', fire:'🔥', poaching:'🎯', other:'📋' };
+
+function ReportCard({ report, onImageClick }) {
+  const urgColor = URGENCY_COLOR[report.urgency] ||
+    (report.urgency?.toLowerCase().includes('high') ? '#ff4444' :
+     report.urgency?.toLowerCase().includes('med')  ? '#ffa500' : '#4caf50');
+  return (
+    <div style={{
+      background:'rgba(255,255,255,0.04)',
+      border:`1px solid ${urgColor}33`,
+      borderLeft:`4px solid ${urgColor}`,
+      borderRadius:14, padding:'14px 16px',
+      animation: report._live ? 'liveIn 0.4s cubic-bezier(0.16,1,0.3,1)' : 'none',
+      position:'relative', overflow:'hidden',
+    }}>
+      {/* Live badge */}
+      {report._live && (
+        <span style={{
+          position:'absolute', top:10, right:12,
+          background:'#ff174422', border:'1px solid #ff174466',
+          color:'#ff5252', fontSize:'0.62rem', fontWeight:800,
+          padding:'1px 7px', borderRadius:100, letterSpacing:'0.5px',
+          textTransform:'uppercase',
+        }}>🔴 LIVE</span>
+      )}
+      <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+        <div style={{ flex:1 }}>
+          <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', marginBottom:6 }}>
+            <span style={{ fontSize:'0.72rem', fontWeight:800, color: urgColor,
+              textTransform:'uppercase', letterSpacing:'0.5px' }}>
+              {TYPE_EMOJI[report.type] || '📋'} {report.type}
+            </span>
+            <span style={{ fontSize:'0.7rem', color:'#888' }}>•</span>
+            <span style={{ fontSize:'0.7rem', color:'#888' }}>{report.region}</span>
+            <span style={{ fontSize:'0.7rem', color:'#888' }}>•</span>
+            <span style={{ fontSize:'0.7rem', color:'#666' }}>
+              <Clock size={10} style={{verticalAlign:'middle', marginRight:3}}/>
+              {timeAgo(report.createdAt || report.timestamp)}
+            </span>
+          </div>
+          <div style={{ fontSize:'0.83rem', color:'#e0e0e0', marginBottom:4 }}>
+            <MapPin size={12} style={{verticalAlign:'middle', marginRight:4, color:'#888'}}/>
+            {report.location}
+          </div>
+          <p style={{ fontSize:'0.78rem', color:'#9aa0a6', margin:'4px 0 8px', lineHeight:1.5 }}>
+            {report.description}
+          </p>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            <span style={{
+              fontSize:'0.68rem', fontWeight:700, padding:'2px 8px',
+              background:`${urgColor}22`, color: urgColor,
+              borderRadius:100,
+            }}>{report.urgency?.split('—')[0]?.trim() || report.urgency}</span>
+            {report.refId && (
+              <span style={{ fontSize:'0.68rem', color:'#666',
+                background:'rgba(255,255,255,0.06)', padding:'2px 8px', borderRadius:100 }}>
+                🔖 {report.refId}
+              </span>
+            )}
+            {report.status && (
+              <span style={{
+                fontSize:'0.68rem', fontWeight:700, padding:'2px 8px', borderRadius:100,
+                background: report.status==='pending'   ? 'rgba(255,152,0,0.15)' :
+                            report.status==='reviewed'  ? 'rgba(33,150,243,0.15)' :
+                            report.status==='resolved'  ? 'rgba(76,175,80,0.15)' : 'rgba(255,68,68,0.1)',
+                color:       report.status==='pending'   ? '#ffb74d' :
+                            report.status==='reviewed'  ? '#64b5f6' :
+                            report.status==='resolved'  ? '#81c784' : '#ff5252',
+              }}>● {report.status}</span>
+            )}
+          </div>
+        </div>
+        {/* Image thumbnails */}
+        {report.imageData?.length > 0 && (
+          <div style={{ display:'flex', flexDirection:'column', gap:5, flexShrink:0 }}>
+            {report.imageData.slice(0,3).map((img, i) => (
+              <button key={i} onClick={() => onImageClick(img)}
+                title="View full image"
+                style={{
+                  width:64, height:64, borderRadius:8, overflow:'hidden',
+                  border:'2px solid rgba(255,255,255,0.12)',
+                  cursor:'zoom-in', padding:0, background:'none',
+                  position:'relative', display:'block',
+                }}
+              >
+                <img src={img} alt={`Evidence ${i+1}`}
+                  style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+                />
+                {i === 2 && report.imageData.length > 3 && (
+                  <div style={{
+                    position:'absolute', inset:0,
+                    background:'rgba(0,0,0,0.6)',
+                    color:'#fff', fontWeight:700, fontSize:'0.75rem',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                  }}>+{report.imageData.length - 3}</div>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /* ── Copy-to-clipboard hook ── */
@@ -228,7 +375,12 @@ function VillageAdvisory({ alert }) {
 const Alerts = () => {
   const { user } = useAuth();
   const canModerate = user?.role === 'admin' || user?.role === 'asha_worker';
+  const [tab,      setTab]      = useState('alerts');   // 'alerts' | 'reports'
   const [alerts,   setAlerts]   = useState(STATIC_ALERTS);
+  const [reports,  setReports]  = useState([]);
+  const [rptLoad,  setRptLoad]  = useState(false);
+  const [lightbox, setLightbox] = useState(null);
+  const wsRef = useRef(null);
   const [loading,  setLoading]  = useState(true);
   const [search,   setSearch]   = useState('');
   const [severity, setSeverity] = useState('all');
@@ -265,11 +417,56 @@ const Alerts = () => {
     setLoading(false);
   }, []);
 
+  /* ── Fetch community reports (admin/worker only) ── */
+  const fetchReports = useCallback(async () => {
+    if (!user || !canModerate) return;
+    setRptLoad(true);
+    try {
+      const res = await fetch(`${API}/reports?limit=50`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setReports(json.reports || []);
+      }
+    } catch { /* silent */ }
+    setRptLoad(false);
+  }, [user, canModerate]);
+
+  /* ── Live WebSocket for reports tab ── */
+  useEffect(() => {
+    if (!user) return;
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    const WS_URL  = API_URL.replace(/^http/, 'ws');
+    try {
+      wsRef.current = new WebSocket(WS_URL);
+      wsRef.current.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.event === 'new_report') {
+            const r = { ...msg.data, _id: msg.data.id, _live: true, createdAt: msg.data.timestamp };
+            setReports(prev => [r, ...prev.slice(0, 49)]);
+          }
+          if (msg.event === 'report_updated') {
+            setReports(prev => prev.map(r =>
+              r._id === msg.data.id ? { ...r, status: msg.data.status, riskLevel: msg.data.riskLevel } : r
+            ));
+          }
+        } catch (_) {}
+      };
+    } catch (_) {}
+    return () => { if (wsRef.current) wsRef.current.close(); };
+  }, [user]);
+
   useEffect(() => {
     fetchAlerts();
     const t = setInterval(fetchAlerts, 60000);
     return () => clearInterval(t);
   }, [fetchAlerts]);
+
+  useEffect(() => {
+    if (tab === 'reports') fetchReports();
+  }, [tab, fetchReports]);
 
   useEffect(() => {
     if (!selected && alerts.length) setSelected(alerts[0]);
@@ -319,6 +516,8 @@ const Alerts = () => {
 
   return (
     <div className="page-root alerts-page">
+      {lightbox && <ReportLightbox src={lightbox} onClose={() => setLightbox(null)} />}
+
       <div className="page-header-bar">
         <div>
           <h1 className="page-title">
@@ -331,14 +530,83 @@ const Alerts = () => {
           </p>
         </div>
         <div style={{ display:'flex', gap:10 }}>
-          <button className="icon-btn" onClick={fetchAlerts} disabled={loading}>
-            <RefreshCw size={14} className={loading ? 'spinning' : ''}/> Refresh
+          <button className="icon-btn" onClick={tab === 'alerts' ? fetchAlerts : fetchReports}
+            disabled={loading || rptLoad}>
+            <RefreshCw size={14} className={(loading || rptLoad) ? 'spinning' : ''}/> Refresh
           </button>
-          <button className={`icon-btn ${showMap ? 'active' : ''}`} onClick={() => setShowMap(!showMap)}>
-            {showMap ? <X size={16}/> : <MapPin size={16}/>} {showMap ? 'Hide Map' : 'Show Map'}
-          </button>
+          {tab === 'alerts' && (
+            <button className={`icon-btn ${showMap ? 'active' : ''}`} onClick={() => setShowMap(!showMap)}>
+              {showMap ? <X size={16}/> : <MapPin size={16}/>} {showMap ? 'Hide Map' : 'Show Map'}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* ── Tab switcher ── */}
+      <div style={{ display:'flex', gap:2, marginBottom:16,
+        borderBottom:'1px solid rgba(255,255,255,0.08)', paddingBottom:0 }}>
+        {[
+          { key:'alerts',  label:'🚨 Alerts',            count: alerts.length },
+          { key:'reports', label:'📋 Community Reports',  count: reports.length, restricted: !canModerate },
+        ].map(t => (
+          !t.restricted && (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              style={{
+                background:'none', border:'none', cursor:'pointer',
+                padding:'10px 18px', fontSize:'0.85rem', fontWeight: tab===t.key ? 700 : 500,
+                color: tab===t.key ? '#4caf50' : '#888',
+                borderBottom: tab===t.key ? '2px solid #4caf50' : '2px solid transparent',
+                transition:'all 0.2s', display:'flex', alignItems:'center', gap:6,
+              }}
+            >
+              {t.label}
+              <span style={{
+                background: tab===t.key ? 'rgba(76,175,80,0.2)' : 'rgba(255,255,255,0.07)',
+                color: tab===t.key ? '#81c784' : '#666',
+                fontSize:'0.7rem', fontWeight:700,
+                padding:'1px 7px', borderRadius:100,
+              }}>{t.count}</span>
+            </button>
+          )
+        ))}
+      </div>
+
+      {/* ══ REPORTS TAB ══ */}
+      {tab === 'reports' && (
+        <div>
+          <div style={{ marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ width:8, height:8, borderRadius:'50%', background:'#4caf50',
+              boxShadow:'0 0 0 2px #4caf5044', animation:'pulse-dot 2s infinite' }}/>
+            <span style={{ fontSize:'0.75rem', color:'#666' }}>Live — new reports appear instantly</span>
+          </div>
+          <style>{`
+            @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+            @keyframes liveIn {
+              from { opacity:0; transform:translateY(-8px) scale(0.97); }
+              to   { opacity:1; transform:translateY(0) scale(1); }
+            }
+          `}</style>
+          {rptLoad && (
+            <div style={{ textAlign:'center', color:'#555', padding:20, fontSize:'0.85rem' }}>
+              Loading reports…
+            </div>
+          )}
+          {!rptLoad && reports.length === 0 && (
+            <div style={{ textAlign:'center', color:'#555', padding:32, fontSize:'0.85rem' }}>
+              <FileText size={32} style={{ opacity:0.3, display:'block', margin:'0 auto 8px' }}/>
+              No community reports yet.
+            </div>
+          )}
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {reports.map((r, i) => (
+              <ReportCard key={r._id || r.refId || i} report={r} onImageClick={setLightbox} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══ ALERTS TAB ══ */}
+      {tab === 'alerts' && (<>
 
       {/* Severity counters */}
       <div className="sev-counters">
@@ -561,6 +829,7 @@ const Alerts = () => {
           </div>
         )}
       </div>
+      </>)}
     </div>
   );
 };
