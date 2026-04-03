@@ -93,27 +93,32 @@ function StatCard({ icon: Icon, label, value, delta, bad, color = '#4CAF50' }) {
    MAIN COMPONENT
 ════════════════════════════════════════════════ */
 const Analytics = () => {
-  const [data,     setData]     = useState(null);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState('');
-  const [wsOnline, setWsOnline] = useState(false);
-  const [feed,     setFeed]     = useState([]);
-  const [lastPoll, setLastPoll] = useState(null);
-  const [polling,  setPolling]  = useState(false);
+  const [data,       setData]       = useState(null);
+  const [liveFeed,   setLiveFeed]   = useState(null);  // /api/alerts/live-feed
+  const [mlStatus,   setMlStatus]   = useState(null);  // /api/ml/status
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState('');
+  const [wsOnline,   setWsOnline]   = useState(false);
+  const [feed,       setFeed]       = useState([]);
+  const [lastPoll,   setLastPoll]   = useState(null);
+  const [polling,    setPolling]    = useState(false);
   const wsRef    = useRef(null);
   const timerRef = useRef(null);
 
-  /* ── Fetch live data ── */
+  /* ── Fetch live data (analysis + live-feed + ml-status in parallel) ── */
   const fetchLive = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     setPolling(true);
     try {
-      const res = await fetch(`${API}/analysis/live`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setData(json);
+      const [res1, res2, res3] = await Promise.allSettled([
+        fetch(`${API}/analysis/live`,    { headers: { Authorization: `Bearer ${getToken()}` } }),
+        fetch(`${API}/alerts/live-feed`, { headers: { Authorization: `Bearer ${getToken()}` } }),
+        fetch(`${API}/ml/status`,        { headers: { Authorization: `Bearer ${getToken()}` } }),
+      ]);
+      if (res1.status === 'fulfilled' && res1.value.ok) setData(await res1.value.json());
+      else if (res1.status === 'fulfilled') throw new Error(`HTTP ${res1.value.status}`);
+      if (res2.status === 'fulfilled' && res2.value.ok) setLiveFeed(await res2.value.json());
+      if (res3.status === 'fulfilled' && res3.value.ok) setMlStatus(await res3.value.json());
       setLastPoll(new Date().toLocaleTimeString());
       setError('');
     } catch (e) {
@@ -144,14 +149,47 @@ const Analytics = () => {
           try {
             const msg = JSON.parse(e.data);
             if (msg.event !== 'connected') {
-              setFeed(prev => [{
-                id:    Date.now(),
-                event: msg.event,
-                text:  msg.data?.message || msg.event,
-                time:  new Date().toLocaleTimeString(),
-                lat:   msg.data?.lat,
-                lng:   msg.data?.lng,
-              }, ...prev].slice(0, 20));
+              /* Real-time alert batch — add each alert to feed */
+              if (msg.event === 'realtime_alert_batch' && msg.data?.alerts) {
+                msg.data.alerts.forEach(a => {
+                  setFeed(prev => [{
+                    id:       Date.now() + Math.random(),
+                    event:    `🛰️ ${a.type} Alert`,
+                    text:     a.description?.slice(0, 100) || a.location,
+                    location: a.location,
+                    severity: a.severity,
+                    source:   a.notificationType || 'satellite',
+                    time:     new Date().toLocaleTimeString(),
+                  }, ...prev].slice(0, 30));
+                });
+              } else if (msg.event === 'realtime_critical_alert') {
+                setFeed(prev => [{
+                  id:       Date.now() + Math.random(),
+                  event:    `🔴 CRITICAL: ${msg.data.type}`,
+                  text:     msg.data.description?.slice(0, 120) || msg.data.location,
+                  location: msg.data.location,
+                  severity: 'critical',
+                  time:     new Date().toLocaleTimeString(),
+                }, ...prev].slice(0, 30));
+                
+                try {
+                  window.__bioguardToast?.({
+                    severity: 'critical',
+                    text: `🛰️ SATELLITE ALERT — ${msg.data.location}`,
+                    subtext: msg.data.description?.slice(0, 90),
+                    solutions: msg.data.solutions || ['Avoid area immediately.'],
+                  });
+                } catch (_) {}
+              } else {
+                setFeed(prev => [{
+                  id:    Date.now(),
+                  event: msg.event,
+                  text:  msg.data?.message || msg.event,
+                  time:  new Date().toLocaleTimeString(),
+                  lat:   msg.data?.lat,
+                  lng:   msg.data?.lng,
+                }, ...prev].slice(0, 30));
+              }
             }
             /* If predictions updated, refetch */
             if (msg.event === 'predictions_updated') fetchLive(true);
@@ -171,24 +209,31 @@ const Analytics = () => {
     return Object.entries(m).map(([k, v]) => ({ name: k, value: v, color: RISK_COLORS[k] }));
   })() : [];
 
-  const reportTrend = (data?.reports?.trend || []).slice(-14).map(r => ({
-    date:  r.date.slice(5), // MM-DD
-    reports: r.count,
-  }));
-  const incidentTrend = (data?.incidents?.trend || []).slice(-14).map(r => ({
-    date:       r.date.slice(5),
-    incidents:  r.count,
-    casualties: r.casualties,
-  }));
-
-  /* Merge report + incident trend by date */
+  /* ── Build a full 14-day scaffold so chart always has all dates ── */
   const mergedTrend = (() => {
     const map = {};
-    reportTrend.forEach(r => { map[r.date] = { date: r.date, reports: r.reports, incidents: 0 }; });
-    incidentTrend.forEach(r => {
-      if (map[r.date]) map[r.date].incidents = r.incidents;
-      else map[r.date] = { date: r.date, reports: 0, incidents: r.incidents };
+    /* Scaffold last 14 days */
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      map[key] = { date: key, reports: 0, incidents: 0, liveAlerts: 0 };
+    }
+    /* Fill from DB trend data */
+    (data?.reports?.trend || []).forEach(r => {
+      const key = r.date?.slice(5);
+      if (key && map[key]) map[key].reports = r.count;
     });
+    (data?.incidents?.trend || []).forEach(r => {
+      const key = r.date?.slice(5);
+      if (key && map[key]) map[key].incidents = r.count;
+      else if (key) map[key] = { date: key, reports: 0, incidents: r.count, liveAlerts: 0 };
+    });
+    /* Add today's live alert count */
+    const todayKey = (() => {
+      const d = new Date();
+      return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    })();
+    if (map[todayKey]) map[todayKey].liveAlerts = liveFeed?.meta?.liveCount || 0;
     return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
   })();
 
@@ -287,14 +332,19 @@ const Analytics = () => {
                     <stop offset="5%"  stopColor="#ff6d00" stopOpacity={0.4}/>
                     <stop offset="95%" stopColor="#ff6d00" stopOpacity={0}/>
                   </linearGradient>
+                  <linearGradient id="gLive" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#29b6f6" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#29b6f6" stopOpacity={0}/>
+                  </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)"/>
                 <XAxis dataKey="date" tick={{ fill:'#666', fontSize:11 }} axisLine={false} tickLine={false}/>
                 <YAxis tick={{ fill:'#666', fontSize:11 }} axisLine={false} tickLine={false}/>
                 <Tooltip contentStyle={TOOLTIP_STYLE}/>
                 <Legend wrapperStyle={{ fontSize:'0.8rem', color:'#666' }}/>
-                <Area type="monotone" dataKey="reports"   name="Community Reports" stroke="#4CAF50" fill="url(#gReports)"   strokeWidth={2}/>
-                <Area type="monotone" dataKey="incidents" name="Incidents"         stroke="#ff6d00" fill="url(#gIncidents)" strokeWidth={2}/>
+                <Area type="monotone" dataKey="reports"    name="Community Reports" stroke="#4CAF50" fill="url(#gReports)"   strokeWidth={2}/>
+                <Area type="monotone" dataKey="incidents"  name="Incidents"         stroke="#ff6d00" fill="url(#gIncidents)" strokeWidth={2}/>
+                <Area type="monotone" dataKey="liveAlerts" name="Live RT Alerts"    stroke="#29b6f6" fill="url(#gLive)"      strokeWidth={1.5} strokeDasharray="4 2"/>
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -404,13 +454,43 @@ const Analytics = () => {
 
       </div>
 
+      {/* ── ML Status Banner ── */}
+      {mlStatus && (mlStatus.realtime_alert_boosts_active > 0 || mlStatus.community_report_regions_active > 0) && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(76,175,80,0.08), rgba(171,71,188,0.08))',
+          border: '1px solid rgba(76,175,80,0.2)', borderRadius: 14,
+          padding: '12px 18px', display: 'flex', gap: 24, flexWrap: 'wrap',
+          alignItems: 'center', marginBottom: 20,
+        }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <PulseDot color="#4CAF50"/>
+            <span style={{ fontSize:'0.78rem', color:'#81c784', fontWeight:700 }}>ML Real-Time Signals Active</span>
+          </div>
+          {mlStatus.realtime_alert_boosts_active > 0 && (
+            <span style={{ fontSize:'0.75rem', color:'#888' }}>
+              🛰️ <strong style={{color:'#4CAF50'}}>{mlStatus.realtime_alert_boosts_active}</strong> zones with satellite/GBIF boosts
+            </span>
+          )}
+          {mlStatus.community_report_regions_active > 0 && (
+            <span style={{ fontSize:'0.75rem', color:'#888' }}>
+              📋 <strong style={{color:'#ab47bc'}}>{mlStatus.community_report_regions_active}</strong> regions with community report signals
+            </span>
+          )}
+          {mlStatus.live_alert_pipeline?.last_polled && (
+            <span style={{ fontSize:'0.72rem', color:'#555', marginLeft:'auto' }}>
+              Last real-time poll: {new Date(mlStatus.live_alert_pipeline.last_polled).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ── ML Predictions table ── */}
       <div className="predictions-section">
         <div className="panel-hdr" style={{ marginBottom: 16 }}>
           <h3><Zap size={16} style={{marginRight:6,verticalAlign:'middle'}}/>ML Zone Risk Predictions</h3>
           <span className="panel-tag live-tag">
             <PulseDot color="#ab47bc"/>
-            Computed from live Reports + Incidents + Temporal factors
+            Driven by Live Reports + Incidents + Real-Time GBIF/GFW + Community Signals
           </span>
         </div>
         <div className="pred-grid">
@@ -419,6 +499,19 @@ const Analytics = () => {
               <div className="pred-card-top">
                 <div className="pred-zone">{p.zone_name}</div>
                 <RiskBadge level={p.risk_level} />
+              </div>
+              {/* Real-time signal badges */}
+              <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:6 }}>
+                {p.data_sources?.realtime_alert_active && (
+                  <span style={{ fontSize:'0.62rem', fontWeight:800, color:'#4CAF50',
+                    background:'rgba(76,175,80,0.12)', border:'1px solid rgba(76,175,80,0.25)',
+                    borderRadius:100, padding:'1px 7px' }}>🛰️ RT Alert</span>
+                )}
+                {p.data_sources?.community_reports_signal && (
+                  <span style={{ fontSize:'0.62rem', fontWeight:800, color:'#ab47bc',
+                    background:'rgba(171,71,188,0.12)', border:'1px solid rgba(171,71,188,0.25)',
+                    borderRadius:100, padding:'1px 7px' }}>📋 Community</span>
+                )}
               </div>
               <div className="pred-threat">{p.threat_type}</div>
               <div className="pred-score-bar">
@@ -433,9 +526,14 @@ const Analytics = () => {
               </div>
               <p className="pred-text">{p.prediction}</p>
               <div className="pred-factors">
-                <span title="Zone base risk">🏔 {(p.factors.base_zone_risk * 100).toFixed(0)}%</span>
-                <span title="Live report frequency">📋 {(p.factors.live_report_freq * 100).toFixed(0)}%</span>
-                <span title="Incident severity">⚠ {(p.factors.incident_severity * 100).toFixed(0)}%</span>
+                <span title="Zone base risk">🏔 {(p.factors?.base_zone_risk * 100 || 0).toFixed(0)}%</span>
+                <span title="Live report frequency">📋 {(p.factors?.live_report_freq * 100 || 0).toFixed(0)}%</span>
+                {p.factors?.realtime_alert_boost > 0 && (
+                  <span title="Real-time alert boost" style={{color:'#4CAF50'}}>🛰️ +{(p.factors.realtime_alert_boost * 100).toFixed(0)}%</span>
+                )}
+                {p.factors?.community_report_boost > 0 && (
+                  <span title="Community report boost" style={{color:'#ab47bc'}}>👥 +{(p.factors.community_report_boost * 100).toFixed(0)}%</span>
+                )}
                 <span title="Confidence">✓ {(p.confidence * 100).toFixed(0)}% conf</span>
               </div>
             </div>
@@ -447,26 +545,50 @@ const Analytics = () => {
         </div>
       </div>
 
-      {/* ── Live WebSocket feed ── */}
+      {/* ── Live Real-Time Alert Feed ── */}
       <div className="live-feed-section">
         <div className="panel-hdr" style={{ marginBottom: 12 }}>
           <h3>
             <PulseDot color={wsOnline ? '#4CAF50' : '#ff6d00'} />
             Real-Time Event Feed
           </h3>
-          <span className="panel-tag">WebSocket · BioGuard Satellite &amp; Patrol Network</span>
+          <span className="panel-tag">
+            WebSocket · GBIF/GFW/Satellite/Patrol · {liveFeed?.meta?.liveCount || 0} live alerts polled
+          </span>
         </div>
         <div className="feed-list">
           {feed.length === 0 && (
             <div className="feed-item feed-empty">
-              <span>Waiting for live events… {wsOnline ? '(connected)' : '(connecting…)'}</span>
+              <span>Waiting for live events… {wsOnline ? '(connected — real-time alerts poll every 15 min)' : '(connecting…)'}</span>
             </div>
           )}
           {feed.map(item => (
-            <div className="feed-item" key={item.id}>
+            <div className="feed-item" key={item.id} style={{
+              borderLeft: item.severity === 'critical' ? '3px solid #ff1744' :
+                          item.severity === 'warning'  ? '3px solid #ff9100' : '3px solid #29b6f6',
+            }}>
               <span className="feed-time">{item.time}</span>
-              <span className="feed-event">{item.event.replace(/_/g, ' ')}</span>
+              <span className="feed-event" style={{
+                color: item.severity === 'critical' ? '#ff5252' :
+                       item.severity === 'warning'  ? '#ffb74d' : '#64b5f6',
+              }}>{item.event}</span>
               <span className="feed-text">{item.text}</span>
+              {item.location && (
+                <span style={{ fontSize:'0.7rem', color:'#555', marginLeft:'auto', whiteSpace:'nowrap' }}>
+                  📍 {item.location.split('—')[0]?.trim().slice(0, 30)}
+                </span>
+              )}
+            </div>
+          ))}
+          {/* Show cached live alerts from last poll */}
+          {feed.length === 0 && liveFeed?.liveAlerts?.slice(0,5).map((a, i) => (
+            <div className="feed-item" key={`cached-${i}`} style={{
+              borderLeft: a.severity === 'critical' ? '3px solid #ff174488' : '3px solid #ff910088',
+              opacity: 0.7,
+            }}>
+              <span className="feed-time">{a.polledAt ? new Date(a.polledAt).toLocaleTimeString() : '—'}</span>
+              <span className="feed-event" style={{ color: '#888' }}>🛰️ {a.type}</span>
+              <span className="feed-text">{a.description?.slice(0, 100)}</span>
             </div>
           ))}
         </div>

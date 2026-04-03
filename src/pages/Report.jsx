@@ -43,8 +43,23 @@ const Report = () => {
     type: '', region: '', location: '', urgency: '', description: '',
     files: [], imageData: [], name: '', phone: '', email: '', anonymous: false,
   });
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    fetch(`${API_URL}/api/locations/suggestions`)
+      .then(res => res.json())
+      .then(data => setSuggestions(data.locations || []))
+      .catch(() => {});
+  }, []);
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  const filteredSuggestions = suggestions.filter(s => 
+    s.name.toLowerCase().includes((form.location||'').toLowerCase()) ||
+    s.state.toLowerCase().includes((form.location||'').toLowerCase())
+  ).slice(0, 10);
 
   const canNext = () => {
     if (step === 0) return !!form.type;
@@ -186,18 +201,7 @@ const Report = () => {
               <h2 className="step-title">Location &amp; Details</h2>
               <p className="step-hint">Help responders locate the incident quickly.</p>
               <div className="form-grid">
-                <div className="form-group full">
-                  <label>Quick Location Suggestion</label>
-                  <select className="form-select" onChange={e => {
-                    const sel = QUICK_LOCATIONS.find(q => q.name === e.target.value);
-                    if (sel && sel.name !== 'Custom Location') {
-                      set('region', sel.region);
-                      set('location', sel.loc);
-                    }
-                  }}>
-                    {QUICK_LOCATIONS.map(q => <option key={q.name} value={q.name}>{q.name}</option>)}
-                  </select>
-                </div>
+                {/* Removed Quick Location Suggestion dropdown since we now have Autocomplete */}
                 <div className="form-group">
                   <label>State / Region *</label>
                   <select className="form-select" value={form.region} onChange={e => set('region', e.target.value)}>
@@ -205,12 +209,46 @@ const Report = () => {
                     {REGIONS.map(r => <option key={r}>{r}</option>)}
                   </select>
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ position: 'relative' }}>
                   <label>Specific Location *</label>
                   <div className="input-icon-wrap">
                     <MapPin size={15}/>
-                    <input className="form-input" placeholder="Village, forest range, landmark…"
-                      value={form.location} onChange={e => set('location', e.target.value)}/>
+                    <input className="form-input" placeholder="Search village, park, or landmark…"
+                      value={form.location}
+                      onChange={e => {
+                        set('location', e.target.value);
+                        setShowSuggestions(true);
+                      }}
+                      onFocus={() => setShowSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    />
+                    {showSuggestions && filteredSuggestions.length > 0 && form.location && (
+                      <div className="autocomplete-dropdown" style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0,
+                        background: '#1a1d24', border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 8, marginTop: 4, zIndex: 100, maxHeight: 200, overflowY: 'auto',
+                        boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
+                      }}>
+                        {filteredSuggestions.map((loc, i) => (
+                          <div key={i} onClick={() => {
+                            set('location', loc.name);
+                            if (loc.state) set('region', loc.state);
+                            setShowSuggestions(false);
+                          }} style={{
+                            padding: '10px 14px', cursor: 'pointer', fontSize: '0.82rem',
+                            borderBottom: i < filteredSuggestions.length-1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                            display: 'flex', flexDirection: 'column', gap: 2,
+                            background: 'transparent',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <span style={{ color: '#fff', fontWeight: 600 }}>{loc.name}</span>
+                            <span style={{ fontSize: '0.7rem', color: '#888' }}>{loc.state} • {loc.type}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="form-group full">

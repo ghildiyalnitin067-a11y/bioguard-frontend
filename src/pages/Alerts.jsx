@@ -385,10 +385,25 @@ const DEFAULT_FORM = {
   lat: '', lng: '',
 };
 
-function CreateAlertModal({ onClose, onCreated }) {
+function CreateAlertModal({ onClose, onCreated, userRole }) {
   const [form,    setForm]    = useState(DEFAULT_FORM);
   const [saving,  setSaving]  = useState(false);
   const [err,     setErr]     = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    fetch(`${API_URL}/api/locations/suggestions`)
+      .then(res => res.json())
+      .then(data => setSuggestions(data.locations || []))
+      .catch(() => {});
+  }, []);
+
+  const filteredSuggestions = suggestions.filter(s => 
+    s.name.toLowerCase().includes((form.location||'').toLowerCase()) ||
+    s.state.toLowerCase().includes((form.location||'').toLowerCase())
+  ).slice(0, 10);
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -407,6 +422,8 @@ function CreateAlertModal({ onClose, onCreated }) {
         description: form.description.trim(),
         action:      form.action.trim(),
         status:      'active',
+        source:      userRole === 'admin' ? 'admin' : 'asha_worker',
+        notificationType: 'field_report',
         coordinates: form.lat && form.lng
           ? { lat: parseFloat(form.lat), lng: parseFloat(form.lng) }
           : { lat: 26.2, lng: 93.0 },
@@ -480,9 +497,44 @@ function CreateAlertModal({ onClose, onCreated }) {
 
           {/* Location + State */}
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 14 }}>
-            <div>
+            <div style={{ position: 'relative' }}>
               <label style={labelStyle}>Location <span style={{ color: '#ff5252' }}>*</span></label>
-              <input value={form.location} onChange={e => set('location', e.target.value)} placeholder="e.g. Kaziranga NP, Assam" style={inputStyle} />
+              <input value={form.location} 
+                onChange={e => {
+                  set('location', e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                placeholder="Search village, park, or landmark…" style={inputStyle} 
+              />
+              {showSuggestions && filteredSuggestions.length > 0 && form.location && (
+                <div className="autocomplete-dropdown" style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0,
+                  background: '#1a1d24', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8, marginTop: 4, zIndex: 100, maxHeight: 200, overflowY: 'auto',
+                  boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
+                }}>
+                  {filteredSuggestions.map((loc, i) => (
+                    <div key={i} onClick={() => {
+                      set('location', loc.name);
+                      if (loc.state) set('state', loc.state);
+                      if (loc.lat && loc.lng) { set('lat', loc.lat); set('lng', loc.lng); }
+                      setShowSuggestions(false);
+                    }} style={{
+                      padding: '10px 14px', cursor: 'pointer', fontSize: '0.82rem',
+                      borderBottom: i < filteredSuggestions.length-1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                      display: 'flex', flexDirection: 'column', gap: 2,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <span style={{ color: '#fff', fontWeight: 600 }}>{loc.name}</span>
+                      <span style={{ fontSize: '0.7rem', color: '#888' }}>{loc.state} • {loc.type}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label style={labelStyle}>State</label>
@@ -582,9 +634,8 @@ const Alerts = () => {
     setLoading(false);
   }, []);
 
-  /* ── Fetch community reports (admin/worker only) ── */
+  /* ── Fetch community reports (public) ── */
   const fetchReports = useCallback(async () => {
-    if (!user || !canModerate) return;
     setRptLoad(true);
     try {
       const res = await fetch(`${API}/reports?limit=50`, {
@@ -624,6 +675,29 @@ const Alerts = () => {
               text: `${a.type} Alert — ${a.location}`,
               subtext: a.description?.slice(0, 90),
               solutions: a.solutions,
+            });
+          }
+
+          /* ── Real-Time GBIF/GFW/Satellite batch broadcast ── */
+          if (msg.event === 'realtime_alert_batch' && msg.data?.alerts) {
+            const liveData = msg.data.alerts.map(a => ({ 
+              ...a, _id: a.id || Date.now() + Math.random(), _live: true, source: 'system' 
+            }));
+            setAlerts(prev => {
+              // filter existing
+              const newAlerts = liveData.filter(la => !prev.find(x => x._id === la._id));
+              return [...newAlerts, ...prev].slice(0, 100);
+            });
+          }
+
+          /* ── Critical Real-Time Intelligence ── */
+          if (msg.event === 'realtime_critical_alert') {
+            const a = msg.data;
+            fireToast({
+              severity: 'critical',
+              text: `🛰️ SATELLITE ALERT — ${a.location}`,
+              subtext: a.description?.slice(0, 90),
+              solutions: a.solutions || ['Avoid area immediately.'],
             });
           }
 
@@ -712,7 +786,7 @@ const Alerts = () => {
   return (
     <div className="page-root alerts-page">
       {lightbox && <ReportLightbox src={lightbox} onClose={() => setLightbox(null)} />}
-      {showCreate && <CreateAlertModal onClose={() => setShowCreate(false)} onCreated={handleAlertCreated} />}
+      {showCreate && <CreateAlertModal onClose={() => setShowCreate(false)} onCreated={handleAlertCreated} userRole={user?.role} />}
 
       <div className="page-header-bar">
         <div>
@@ -759,8 +833,8 @@ const Alerts = () => {
       <div style={{ display:'flex', gap:2, marginBottom:16,
         borderBottom:'1px solid rgba(255,255,255,0.08)', paddingBottom:0 }}>
         {[
-          { key:'alerts',  label:'🚨 Alerts',            count: alerts.length },
-          { key:'reports', label:'📋 Community Reports',  count: reports.length, restricted: !canModerate },
+          { key:'alerts',  label:'🚨 Alerts',             count: alerts.length },
+          { key:'reports', label:'📋 Community Reports',  count: reports.length },
         ].map(t => (
           !t.restricted && (
             <button key={t.key} onClick={() => setTab(t.key)}
@@ -935,7 +1009,16 @@ const Alerts = () => {
               <CheckCircle size={40} /> <p>No alerts match the current filters.</p>
             </div>
           )}
-          {filtered.map(a => {
+
+          {/* Group: Real-Time Intelligence & Satellite */}
+          {filtered.filter(a => a.source === 'system' || !a.source).length > 0 && (
+            <div style={{ padding: '0 8px 8px', margin: '4px 0 8px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <h4 style={{ color: '#b0bec5', margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Zap size={14} color="#ffb74d"/> Real-Time Intelligence & Satellite Alerts
+              </h4>
+            </div>
+          )}
+          {filtered.filter(a => a.source === 'system' || !a.source).map(a => {
             const Icon = SEV_ICON[a.severity] || AlertTriangle;
             return (
               <div key={a._id}
@@ -963,7 +1046,52 @@ const Alerts = () => {
                     )}
                     <span className="ac-time"><Clock size={11}/> {timeAgo(a.createdAt)}</span>
                   </div>
-                  <div className="ac-type">{a.type}</div>
+                  <div className="ac-type">{a.type} <span style={{ color:'#666', fontSize:'0.7rem', fontWeight:400 }}>· System</span></div>
+                  <div className="ac-loc"><MapPin size={12}/> {a.location}</div>
+                  <p className="ac-desc">{a.description}</p>
+                  <div className="ac-action">{a.action} <ChevronRight size={12}/></div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Group: Field Patrols & Asha Workers */}
+          {filtered.filter(a => a.source === 'asha_worker' || a.source === 'admin').length > 0 && (
+            <div style={{ padding: '0 8px 8px', margin: '24px 0 8px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <h4 style={{ color: '#b0bec5', margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Users size={14} color="#64b5f6"/> Asha Worker & Field Patrol Alerts
+              </h4>
+            </div>
+          )}
+          {filtered.filter(a => a.source === 'asha_worker' || a.source === 'admin').map(a => {
+            const Icon = SEV_ICON[a.severity] || AlertTriangle;
+            return (
+              <div key={a._id}
+                className={`alert-card sev-${a.severity} ${selected?._id === a._id ? 'sel' : ''} ${a._live ? 'live-card' : ''}`}
+                onClick={() => setSelected(a)}>
+                <div className={`ac-strip sev-${a.severity}`} />
+                <div className="ac-icon"><Icon size={20}/></div>
+                <div className="ac-body">
+                  <div className="ac-head">
+                    {a._live && (
+                      <span style={{
+                        fontSize: '0.6rem', fontWeight: 800, color: '#ff5252',
+                        background: 'rgba(255,23,68,0.12)', border: '1px solid rgba(255,23,68,0.3)',
+                        borderRadius: 100, padding: '1px 7px', letterSpacing: '0.5px',
+                        textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4,
+                      }}>
+                        <span style={{ width:5, height:5, borderRadius:'50%', background:'#ff5252', display:'inline-block' }}/>
+                        LIVE
+                      </span>
+                    )}
+                    <span className={`sev-badge sev-${a.severity}`}>{a.severity}</span>
+                    <span className={`status-badge ${a.status}`}>{a.status}</span>
+                    {a.villageMessage && (
+                      <span className="advisory-chip"><MessageSquare size={10}/> Village Advisory</span>
+                    )}
+                    <span className="ac-time"><Clock size={11}/> {timeAgo(a.createdAt)}</span>
+                  </div>
+                  <div className="ac-type">{a.type} <span style={{ color:'#81c784', fontSize:'0.7rem', fontWeight:600 }}>· Field Patrol Verified</span></div>
                   <div className="ac-loc"><MapPin size={12}/> {a.location}</div>
                   <p className="ac-desc">{a.description}</p>
                   <div className="ac-action">{a.action} <ChevronRight size={12}/></div>
