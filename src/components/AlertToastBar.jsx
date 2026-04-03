@@ -272,7 +272,11 @@ export default function AlertToastBar() {
     setToasts(p => p.filter(x => x.id !== id));
   }, []);
 
-  useEffect(() => { registerToastFn(addToast); }, [addToast]);
+  useEffect(() => {
+    registerToastFn(addToast);
+    window.__bioguardToast = addToast;   // global hook for pages
+    return () => { window.__bioguardToast = null; };
+  }, [addToast]);
 
   if (!toasts.length) return null;
 

@@ -10,6 +10,18 @@
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes lbZoom {
+  from { transform: scale(0.9); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+@keyframes liveSlideIn {
+  from { opacity: 0; transform: translateX(-12px); background: rgba(255,23,68,0.08); }
+  to   { opacity: 1; transform: translateX(0);      background: rgba(255,255,255,0.03); }
+}
+@keyframes pulseLive {
+  0%,100% { opacity: 1; }
+  50%     { opacity: 0.6; }
+}
 
 .spinning { animation: spin 0.9s linear infinite; }
 
@@ -65,8 +77,20 @@
   cursor: pointer; transition: all 0.25s;
   animation: fadeIn 0.3s ease both;
 }
-.alert-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
-.alert-card.sel  { border-color: #4CAF50; box-shadow: 0 0 0 2px rgba(76,175,80,0.2); }
+.alert-card:hover { background: rgba(255,255,255,0.055); }
+.alert-card.sel  { border-color: rgba(76,175,80,0.5); background: rgba(76,175,80,0.05); }
+.alert-card.live-card { animation: liveSlideIn 0.5s cubic-bezier(0.16,1,0.3,1) both; }
+
+/* ── Create Alert button ── */
+.create-alert-btn {
+  background: rgba(255,145,0,0.12) !important;
+  color: #ff9100 !important;
+  border-color: rgba(255,145,0,0.35) !important;
+}
+.create-alert-btn:hover:not(:disabled) {
+  background: rgba(255,145,0,0.22) !important;
+}
+
 
 .ac-strip { width: 5px; flex-shrink: 0; }
 .ac-strip.sev-critical { background: #ff1744; }

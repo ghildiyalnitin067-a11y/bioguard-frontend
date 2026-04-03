@@ -6,10 +6,15 @@ import {
   AlertTriangle, ShieldAlert, Info, Search,
   Clock, MapPin, ChevronRight, X, CheckCircle, Siren,
   Copy, Check, MessageSquare, Shield, Lightbulb,
-  Users, RefreshCw, Bell, FileText,
+  Users, RefreshCw, Bell, FileText, Plus, Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import './Alerts.css';
+
+/* grab the global toast emitter set up by AlertToastBar */
+function fireToast(t) {
+  try { window.__bioguardToast?.(t); } catch (_) {}
+}
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -372,25 +377,185 @@ function VillageAdvisory({ alert }) {
 /* ════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════ */
+/* ── Create Alert Modal ── */
+const ALERT_TYPES = ['Wildlife','Deforestation','Wildfire','Poaching','Conflict','Other'];
+const DEFAULT_FORM = {
+  type: 'Wildlife', severity: 'warning', location: '', state: '',
+  description: '', action: '',
+  lat: '', lng: '',
+};
+
+function CreateAlertModal({ onClose, onCreated }) {
+  const [form,    setForm]    = useState(DEFAULT_FORM);
+  const [saving,  setSaving]  = useState(false);
+  const [err,     setErr]     = useState('');
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.location.trim() || !form.description.trim()) {
+      setErr('Location and description are required.'); return;
+    }
+    setSaving(true); setErr('');
+    try {
+      const body = {
+        type:        form.type,
+        severity:    form.severity,
+        location:    form.location.trim(),
+        state:       form.state.trim(),
+        description: form.description.trim(),
+        action:      form.action.trim(),
+        status:      'active',
+        coordinates: form.lat && form.lng
+          ? { lat: parseFloat(form.lat), lng: parseFloat(form.lng) }
+          : { lat: 26.2, lng: 93.0 },
+      };
+      const res = await fetch(`${API}/alerts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to create alert');
+      onCreated(json.alert);
+      onClose();
+    } catch (e) { setErr(e.message); }
+    setSaving(false);
+  };
+
+  const SEV_OPTS = ['critical','warning','info'];
+  const inputStyle = {
+    width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)',
+    background: 'rgba(255,255,255,0.05)', color: '#e0e0e0', fontSize: '0.84rem', outline: 'none',
+    boxSizing: 'border-box',
+  };
+  const labelStyle = { fontSize: '0.72rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, display: 'block' };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9990,
+      background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      animation: 'fadeIn 0.2s ease',
+    }}>
+      <div style={{
+        background: '#0f1117', border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: 18, width: '100%', maxWidth: 520, maxHeight: '90vh',
+        overflowY: 'auto', padding: '24px 28px',
+        boxShadow: '0 24px 80px rgba(0,0,0,0.8)',
+        animation: 'lbZoom 0.25s cubic-bezier(0.16,1,0.3,1)',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+              <Zap size={18} color="#ff9100" />
+              <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff' }}>Create Live Alert</span>
+            </div>
+            <p style={{ fontSize: '0.75rem', color: '#666', margin: 0 }}>Alert will be saved to database and broadcast to all users instantly</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16}/></button>
+        </div>
+
+        <form onSubmit={submit}>
+          {/* Type + Severity */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+            <div>
+              <label style={labelStyle}>Alert Type</label>
+              <select value={form.type} onChange={e => set('type', e.target.value)} style={inputStyle}>
+                {ALERT_TYPES.map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Severity</label>
+              <select value={form.severity} onChange={e => set('severity', e.target.value)} style={{ ...inputStyle, color: form.severity === 'critical' ? '#ff1744' : form.severity === 'warning' ? '#ff9100' : '#29b6f6' }}>
+                {SEV_OPTS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Location + State */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 14 }}>
+            <div>
+              <label style={labelStyle}>Location <span style={{ color: '#ff5252' }}>*</span></label>
+              <input value={form.location} onChange={e => set('location', e.target.value)} placeholder="e.g. Kaziranga NP, Assam" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>State</label>
+              <input value={form.state} onChange={e => set('state', e.target.value)} placeholder="e.g. Assam" style={inputStyle} />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>Description <span style={{ color: '#ff5252' }}>*</span></label>
+            <textarea value={form.description} onChange={e => set('description', e.target.value)}
+              placeholder="Describe what is happening…" rows={3}
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
+          </div>
+
+          {/* Action */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>Current Action</label>
+            <input value={form.action} onChange={e => set('action', e.target.value)} placeholder="e.g. Rangers dispatched" style={inputStyle} />
+          </div>
+
+          {/* Coordinates */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+            <div>
+              <label style={labelStyle}>Latitude (optional)</label>
+              <input type="number" value={form.lat} onChange={e => set('lat', e.target.value)} placeholder="26.57" style={inputStyle} step="any" />
+            </div>
+            <div>
+              <label style={labelStyle}>Longitude (optional)</label>
+              <input type="number" value={form.lng} onChange={e => set('lng', e.target.value)} placeholder="93.17" style={inputStyle} step="any" />
+            </div>
+          </div>
+
+          {err && <div style={{ background: 'rgba(255,23,68,0.1)', border: '1px solid rgba(255,23,68,0.3)', borderRadius: 8, padding: '8px 12px', color: '#ff5252', fontSize: '0.8rem', marginBottom: 14 }}>{err}</div>}
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={{ padding: '9px 20px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.1)', background: 'none', color: '#888', fontSize: '0.84rem', cursor: 'pointer' }}>Cancel</button>
+            <button type="submit" disabled={saving} style={{
+              padding: '9px 22px', borderRadius: 9, border: 'none',
+              background: form.severity === 'critical' ? '#ff1744' : form.severity === 'warning' ? '#ff9100' : '#29b6f6',
+              color: '#fff', fontWeight: 700, fontSize: '0.84rem', cursor: saving ? 'wait' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 7, opacity: saving ? 0.7 : 1,
+            }}>
+              <Zap size={14}/>{saving ? 'Broadcasting…' : 'Broadcast Alert'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 const Alerts = () => {
   const { user } = useAuth();
   const canModerate = user?.role === 'admin' || user?.role === 'asha_worker';
-  const [tab,      setTab]      = useState('alerts');   // 'alerts' | 'reports'
-  const [alerts,   setAlerts]   = useState(STATIC_ALERTS);
-  const [reports,  setReports]  = useState([]);
-  const [rptLoad,  setRptLoad]  = useState(false);
-  const [lightbox, setLightbox] = useState(null);
+  const [tab,        setTab]        = useState('alerts');   // 'alerts' | 'reports'
+  const [alerts,     setAlerts]     = useState(STATIC_ALERTS);
+  const [reports,    setReports]    = useState([]);
+  const [rptLoad,    setRptLoad]    = useState(false);
+  const [lightbox,   setLightbox]   = useState(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [liveCount,  setLiveCount]  = useState(0);
   const wsRef = useRef(null);
-  const [loading,  setLoading]  = useState(true);
-  const [search,   setSearch]   = useState('');
-  const [severity, setSeverity] = useState('all');
-  const [type,     setType]     = useState('All Types');
-  const [region,   setRegion]   = useState('All Regions');
-  const [selected, setSelected] = useState(null);
-  const [showMap,  setShowMap]  = useState(false);
+  const [loading,   setLoading]   = useState(true);
+  const [search,    setSearch]    = useState('');
+  const [severity,  setSeverity]  = useState('all');
+  const [type,      setType]      = useState('All Types');
+  const [region,    setRegion]    = useState('All Regions');
+  const [selected,  setSelected]  = useState(null);
+  const [showMap,   setShowMap]   = useState(false);
   const [actionMsg, setActionMsg] = useState('');
 
-  /* Fetch live alerts from API */
+
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
     try {
@@ -401,18 +566,18 @@ const Alerts = () => {
         const json = await res.json();
         if (json.alerts?.length) {
           setAlerts(json.alerts);
-          setSelected(s => s ? (json.alerts.find(a => a._id === s._id) || json.alerts[0]) : json.alerts[0]);
+          setSelected(s => s ? (json.alerts.find(a => a._id === s._id) || null) : null);
         } else {
           setAlerts(STATIC_ALERTS);
-          setSelected(STATIC_ALERTS[0]);
+          setSelected(s => s ? s : null);
         }
       } else {
         setAlerts(STATIC_ALERTS);
-        setSelected(STATIC_ALERTS[0]);
+        setSelected(s => s ? s : null);
       }
     } catch {
       setAlerts(STATIC_ALERTS);
-      setSelected(STATIC_ALERTS[0]);
+      setSelected(s => s ? s : null);
     }
     setLoading(false);
   }, []);
@@ -433,7 +598,7 @@ const Alerts = () => {
     setRptLoad(false);
   }, [user, canModerate]);
 
-  /* ── Live WebSocket for reports tab ── */
+  /* ── Live WebSocket — alerts + reports ── */
   useEffect(() => {
     if (!user) return;
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
@@ -443,6 +608,26 @@ const Alerts = () => {
       wsRef.current.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
+
+          /* ── Live alert broadcast ── */
+          if (msg.event === 'new_alert') {
+            const a = { ...msg.data, _id: msg.data._id || msg.data.id, _live: true };
+            setAlerts(prev => {
+              // avoid duplicates
+              if (prev.find(x => x._id === a._id)) return prev;
+              return [a, ...prev.slice(0, 49)];
+            });
+            setLiveCount(c => c + 1);
+            /* show in-app toast */
+            fireToast({
+              severity: a.severity,
+              text: `${a.type} Alert — ${a.location}`,
+              subtext: a.description?.slice(0, 90),
+              solutions: a.solutions,
+            });
+          }
+
+          /* ── Reports ── */
           if (msg.event === 'new_report') {
             const r = { ...msg.data, _id: msg.data.id, _live: true, createdAt: msg.data.timestamp };
             setReports(prev => [r, ...prev.slice(0, 49)]);
@@ -454,6 +639,7 @@ const Alerts = () => {
           }
         } catch (_) {}
       };
+      wsRef.current.onerror = () => {};
     } catch (_) {}
     return () => { if (wsRef.current) wsRef.current.close(); };
   }, [user]);
@@ -468,9 +654,7 @@ const Alerts = () => {
     if (tab === 'reports') fetchReports();
   }, [tab, fetchReports]);
 
-  useEffect(() => {
-    if (!selected && alerts.length) setSelected(alerts[0]);
-  }, [alerts]);
+  // No auto-selection — user must click an alert to open its detail panel
 
   const filtered = alerts.filter(a => {
     const matchSev    = severity === 'all' || a.severity === severity;
@@ -485,6 +669,17 @@ const Alerts = () => {
     warning:  alerts.filter(a => a.severity === 'warning').length,
     info:     alerts.filter(a => a.severity === 'info').length,
   };
+
+  /* ── Handle newly created alert (from form) ── */
+  const handleAlertCreated = useCallback((alert) => {
+    setAlerts(prev => {
+      if (prev.find(x => x._id === alert._id)) return prev;
+      return [{ ...alert, _live: true }, ...prev.slice(0, 49)];
+    });
+    setLiveCount(c => c + 1);
+    setActionMsg('🚀 Alert broadcast live to all users!');
+    setTimeout(() => setActionMsg(''), 4000);
+  }, []);
 
   const resolveAlert = async (id) => {
     try {
@@ -517,6 +712,7 @@ const Alerts = () => {
   return (
     <div className="page-root alerts-page">
       {lightbox && <ReportLightbox src={lightbox} onClose={() => setLightbox(null)} />}
+      {showCreate && <CreateAlertModal onClose={() => setShowCreate(false)} onCreated={handleAlertCreated} />}
 
       <div className="page-header-bar">
         <div>
@@ -529,7 +725,19 @@ const Alerts = () => {
             · Auto-generates village advisory with solutions &amp; prevention
           </p>
         </div>
-        <div style={{ display:'flex', gap:10 }}>
+        <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+          {liveCount > 0 && (
+            <span style={{
+              fontSize: '0.72rem', fontWeight: 800, color: '#ff5252',
+              background: 'rgba(255,23,68,0.12)', border: '1px solid rgba(255,23,68,0.3)',
+              borderRadius: 100, padding: '3px 10px',
+              display: 'flex', alignItems: 'center', gap: 5,
+              animation: 'pulseLive 2s ease-in-out infinite',
+            }}>
+              <span style={{ width:7, height:7, borderRadius:'50%', background:'#ff5252', display:'inline-block' }}/>
+              {liveCount} Live
+            </span>
+          )}
           <button className="icon-btn" onClick={tab === 'alerts' ? fetchAlerts : fetchReports}
             disabled={loading || rptLoad}>
             <RefreshCw size={14} className={(loading || rptLoad) ? 'spinning' : ''}/> Refresh
@@ -537,6 +745,11 @@ const Alerts = () => {
           {tab === 'alerts' && (
             <button className={`icon-btn ${showMap ? 'active' : ''}`} onClick={() => setShowMap(!showMap)}>
               {showMap ? <X size={16}/> : <MapPin size={16}/>} {showMap ? 'Hide Map' : 'Show Map'}
+            </button>
+          )}
+          {canModerate && tab === 'alerts' && (
+            <button className="icon-btn create-alert-btn" onClick={() => setShowCreate(true)}>
+              <Plus size={14}/> Create Alert
             </button>
           )}
         </div>
@@ -726,12 +939,23 @@ const Alerts = () => {
             const Icon = SEV_ICON[a.severity] || AlertTriangle;
             return (
               <div key={a._id}
-                className={`alert-card sev-${a.severity} ${selected?._id === a._id ? 'sel' : ''}`}
+                className={`alert-card sev-${a.severity} ${selected?._id === a._id ? 'sel' : ''} ${a._live ? 'live-card' : ''}`}
                 onClick={() => setSelected(a)}>
                 <div className={`ac-strip sev-${a.severity}`} />
                 <div className="ac-icon"><Icon size={20}/></div>
                 <div className="ac-body">
                   <div className="ac-head">
+                    {a._live && (
+                      <span style={{
+                        fontSize: '0.6rem', fontWeight: 800, color: '#ff5252',
+                        background: 'rgba(255,23,68,0.12)', border: '1px solid rgba(255,23,68,0.3)',
+                        borderRadius: 100, padding: '1px 7px', letterSpacing: '0.5px',
+                        textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4,
+                      }}>
+                        <span style={{ width:5, height:5, borderRadius:'50%', background:'#ff5252', display:'inline-block' }}/>
+                        LIVE
+                      </span>
+                    )}
                     <span className={`sev-badge sev-${a.severity}`}>{a.severity}</span>
                     <span className={`status-badge ${a.status}`}>{a.status}</span>
                     {a.villageMessage && (
