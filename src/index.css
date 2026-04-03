@@ -1,0 +1,133 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import './pages/PageShared.css';
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  background-color: #fdfbf7;
+  color: #333333;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+}
+
+/* ═══════════════════════════════════════════
+   GLOBAL THEME VARIABLES — Redesigned
+   ═══════════════════════════════════════════ */
+:root {
+  /* ── Brand (unchanged) ── */
+  --primary-green:    #16a34a;
+  --primary-dark:     #0d3320;
+  --accent-green:     #22c55e;
+  --danger-red:       #ef4444;
+  --warning-orange:   #f97316;
+  --glass-bg:         rgba(255,255,255,0.12);
+  --glass-border:     rgba(255,255,255,0.22);
+  --transition-smooth: all 0.3s cubic-bezier(0.25,0.8,0.25,1);
+
+  /* ════ LIGHT THEME ════
+     Clean white editorial — emerald accents, deep ink text */
+  --bg-page:          #f7faf7;
+  --bg-card:          #ffffff;
+  --bg-card-alt:      #f1f6f1;
+  --bg-input:         #f8fbf8;
+  --text-heading:     #0d3320;
+  --text-body:        #1c1c1e;
+  --text-sub:         #374151;
+  --text-muted:       #6b7280;
+  --text-light-val:   #fafafa;
+  --text-dark:        #1c1c1e;
+  --border-color:     rgba(0,0,0,0.09);
+  --border-light:     rgba(0,0,0,0.05);
+  --shadow-sm:        0 1px 8px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  --shadow-md:        0 4px 20px rgba(0,0,0,0.10), 0 8px 32px rgba(0,0,0,0.06);
+  --nav-bg:           rgba(255,255,255,0.97);
+  --nav-text:         #0d3320;
+  --stat-bg:          #ffffff;
+  --green-pale:       rgba(34,197,94,0.10);
+  --input-border:     rgba(0,0,0,0.13);
+}
+
+/* ════ DARK THEME ════
+   Deep forest night — vivid lime on rich obsidian green */
+[data-theme="dark"] {
+  --bg-page:          #0c1a0e;
+  --bg-card:          #142018;
+  --bg-card-alt:      #1b2d20;
+  --bg-input:         #111e14;
+  --text-heading:     #86efac;
+  --text-body:        #e2f0e8;
+  --text-sub:         #a7c5ae;
+  --text-muted:       #5e7a65;
+  --text-light-val:   #f0fdf4;
+  --text-dark:        #e2f0e8;
+  --border-color:     rgba(134,239,172,0.10);
+  --border-light:     rgba(134,239,172,0.05);
+  --shadow-sm:        0 1px 8px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-md:        0 4px 20px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.4);
+  --nav-bg:           rgba(12,26,14,0.98);
+  --nav-text:         #86efac;
+  --stat-bg:          #142018;
+  --green-pale:       rgba(134,239,172,0.12);
+  --input-border:     rgba(134,239,172,0.15);
+}
+
+html, body {
+  background: var(--bg-page);
+  color: var(--text-body);
+  transition: background 0.35s ease, color 0.35s ease;
+}
+
+/* ── Global Live Map Glowing Pulse Effects ── */
+@keyframes ring-pulse {
+  0% { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(3.0); opacity: 0; }
+}
+
+.glow-marker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.glow-marker .core {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--mc, #ff1744);
+  box-shadow: 0 0 10px var(--mc, #ff1744);
+  z-index: 2;
+  position: relative;
+}
+.glow-marker .ring {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--mc, #ff1744);
+  opacity: 0.4;
+  animation: ring-pulse 1.8s ease-out infinite;
+  z-index: 1;
+}
+
+.map-pulse-circle {
+  animation: svg-pulse 2s infinite ease-out;
+}
+@keyframes svg-pulse {
+  0%   { stroke-width: 1; stroke-opacity: 0.8; fill-opacity: 0.2; }
+  50%  { stroke-width: 3; stroke-opacity: 1;   fill-opacity: 0.4; }
+  100% { stroke-width: 1; stroke-opacity: 0.8; fill-opacity: 0.2; }
+}

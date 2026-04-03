@@ -1,0 +1,32 @@
+services:
+  # 1. Node.js Backend API
+  - type: web
+    name: bioguard-api
+    env: node
+    rootDirectory: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: '4000'
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+        generateValue: true
+      - key: ML_HOST
+        fromService:
+          type: web
+          name: bioguard-ml
+          property: url
+
+  # 2. Python ML Microservice
+  - type: web
+    name: bioguard-ml
+    env: python
+    rootDirectory: backend/ml
+    buildCommand: pip install -r requirements.txt
+    startCommand: python model.py --serve --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0

@@ -1,0 +1,63 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+node_modules/
+.env
+*.pkl
+*.h5
+*.pt
+dist/
+build/
+# ── Environment / Secrets ─────────────────────────────────────
+# Never commit real env files – use .env.example instead
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.test
+backend/.env
+backend/.env.local
+backend/.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+venv/
+.venv/
+env/
+pip-log.txt
+
+# OS
+Thumbs.db
+
+# Executables and large binaries
+*.exe
+*.dll

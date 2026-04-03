@@ -1,0 +1,345 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  ShieldAlert, Map, Users, ChevronDown, Activity,
+  TreePine, AlertTriangle, Globe, ArrowRight, Eye,
+  TrendingUp, Zap, BookOpen, BarChart2, CheckCircle
+} from 'lucide-react';
+import './Home.css';
+
+/* ─── Animated counter hook ─── */
+function useCounter(end, duration = 2000, startTrigger = false) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!startTrigger) return;
+    let startTime = null;
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      setCount(Math.floor(progress * end));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [end, duration, startTrigger]);
+  return count;
+}
+
+/* ─── Intersection observer hook ─── */
+function useInView(threshold = 0.2) {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setInView(true); },
+      { threshold }
+    );
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [threshold]);
+  return [ref, inView];
+}
+
+/* ─── Stat card ─── */
+const StatCard = ({ icon: Icon, end, suffix, label, color }) => {
+  const [ref, inView] = useInView();
+  const count = useCounter(end, 2200, inView);
+  return (
+    <div className="stat-card" ref={ref} style={{ '--accent': color }}>
+      <div className="stat-icon-wrap"><Icon size={28} /></div>
+      <div className="stat-number">{count.toLocaleString()}{suffix}</div>
+      <div className="stat-label">{label}</div>
+    </div>
+  );
+};
+
+/* ─── Feature card ─── */
+const FeatureCard = ({ icon: Icon, title, description, link, linkLabel, delay }) => (
+  <div className="feature-card" style={{ animationDelay: delay }}>
+    <div className="feature-icon-wrap"><Icon size={32} /></div>
+    <h3>{title}</h3>
+    <p>{description}</p>
+    <Link to={link} className="feature-link">
+      {linkLabel} <ArrowRight size={16} />
+    </Link>
+  </div>
+);
+
+/* ─── Alert ticker item ─── */
+const alerts = [
+  { type: 'danger',  label: 'CRITICAL', text: 'Elephant herd spotted 2km from Bandipur settlement' },
+  { type: 'warning', label: 'WARNING', text: 'Illegal logging detected · Sector 7, Western Ghats' },
+  { type: 'info',    label: 'INFO',    text: 'Forest fire alert cleared · Nagarhole Zone B' },
+  { type: 'danger',  label: 'CRITICAL', text: 'Tiger sighting reported near NH-67 corridor' },
+  { type: 'warning', label: 'WARNING', text: 'Deforestation index rising · Arunachal buffer zone' },
+];
+
+/* ─── Main component ─── */
+const Home = () => {
+  const [heroVisible, setHeroVisible] = useState(false);
+  const [tickerPaused, setTickerPaused] = useState(false);
+  const [featuresRef, featuresInView] = useInView(0.1);
+  const [impactRef, impactInView] = useInView(0.1);
+
+  useEffect(() => {
+    const t = setTimeout(() => setHeroVisible(true), 100);
+    return () => clearTimeout(t);
+  }, []);
+
+  const scrollToFeatures = () => {
+    document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  return (
+    <div className={`home-container ${heroVisible ? 'fade-in' : ''}`}>
+
+      {/* ══════════ LIVE ALERT TICKER ══════════ */}
+      <div
+        className="alert-ticker"
+        onMouseEnter={() => setTickerPaused(true)}
+        onMouseLeave={() => setTickerPaused(false)}
+      >
+        <span className="ticker-label"><Zap size={14} /> LIVE ALERTS</span>
+        <div className="ticker-track-wrapper">
+          <div className={`ticker-track ${tickerPaused ? 'paused' : ''}`}>
+            {[...alerts, ...alerts].map((a, i) => (
+              <span key={i} className={`ticker-item ticker-${a.type}`}>
+                <span className="ticker-badge">{a.label}</span> {a.text}
+                <span className="ticker-sep">  •  </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ══════════ HERO SECTION ══════════ */}
+      <section className="hero-section">
+        <div className="hero-overlay" />
+        <div className="hero-particles">
+          {[...Array(12)].map((_, i) => (
+            <span key={i} className="particle" style={{
+              left: `${Math.random() * 100}%`,
+              animationDuration: `${6 + Math.random() * 8}s`,
+              animationDelay: `${Math.random() * 5}s`,
+              width: `${4 + Math.random() * 6}px`,
+              height: `${4 + Math.random() * 6}px`,
+            }} />
+          ))}
+        </div>
+
+        <div className="hero-content">
+          <div className="hero-badge">
+            <Activity size={14} /> Real-Time Biodiversity Intelligence
+          </div>
+          <h1 className="hero-title">
+            Protecting&nbsp;<span className="hero-highlight">Forests</span> &amp;<br/>
+            Wildlife with Technology
+          </h1>
+          <p className="hero-description">
+            India's most advanced platform for monitoring deforestation, predicting
+            human-wildlife conflict, and mobilising community conservation — in real time.
+          </p>
+          <div className="hero-buttons">
+            <Link to="/dashboard" className="btn btn-primary" id="hero-dashboard-btn">
+              <BarChart2 size={18} /> Explore Dashboard
+            </Link>
+            <Link to="/report" className="btn btn-secondary" id="hero-report-btn">
+              <AlertTriangle size={18} /> Report Incident
+            </Link>
+          </div>
+          <div className="hero-trust">
+            {['Satellite Data', 'AI-Powered Alerts', 'Community-Driven', 'Open Source'].map(tag => (
+              <span key={tag} className="trust-tag"><CheckCircle size={12} /> {tag}</span>
+            ))}
+          </div>
+        </div>
+
+        <button className="scroll-indicator" onClick={scrollToFeatures} aria-label="Scroll down">
+          <ChevronDown size={32} />
+        </button>
+      </section>
+
+      {/* ══════════ LIVE STATS BAR ══════════ */}
+      <section className="stats-section">
+        <div className="stats-grid">
+          <StatCard icon={TreePine}     end={2847}  suffix="+"  label="Deforestation Alerts This Month" color="#4CAF50" />
+          <StatCard icon={ShieldAlert}  end={134}   suffix=""   label="Active Conflict Zones Monitored"  color="#fb8c00" />
+          <StatCard icon={Users}        end={12400} suffix="+"  label="Community Reports Filed"           color="#29b6f6" />
+          <StatCard icon={Globe}        end={98}    suffix="%"  label="Alert Accuracy Rate"               color="#ab47bc" />
+        </div>
+      </section>
+
+      {/* ══════════ FEATURES SECTION ══════════ */}
+      <section id="features" className={`features-section ${featuresInView ? 'animate-in' : ''}`} ref={featuresRef}>
+        <div className="section-container">
+          <div className="section-header">
+            <span className="section-eyebrow">What We Do</span>
+            <h2 className="section-title">Core Capabilities</h2>
+            <p className="section-subtitle">
+              Six powerful modules working in concert to protect India's
+              natural heritage and the communities that live alongside it.
+            </p>
+          </div>
+
+          <div className="features-grid">
+            <FeatureCard
+              icon={Map}
+              title="Real-Time Forest Monitoring"
+              description="Track forest coverage, active fires, and deforestation hotspots using interactive satellite-derived map layers updated every 24 hours."
+              link="/dashboard"
+              linkLabel="Open Map"
+              delay="0s"
+            />
+            <FeatureCard
+              icon={ShieldAlert}
+              title="Wildlife Conflict Alerts"
+              description="Predict and monitor animal movement near human settlements. Instant SMS + in-app alerts for every potential conflict zone."
+              link="/alerts"
+              linkLabel="View Alerts"
+              delay="0.1s"
+            />
+            <FeatureCard
+              icon={Users}
+              title="Community Reporting"
+              description="A crowdsourced network: locals can report illegal logging, poaching, or dangerous wildlife proximity — securely and anonymously."
+              link="/report"
+              linkLabel="Submit Report"
+              delay="0.2s"
+            />
+            <FeatureCard
+              icon={Eye}
+              title="Conflict Monitor"
+              description="A live geospatial dashboard showing ongoing human-wildlife conflict incidents with severity levels, response status, and trend lines."
+              link="/conflict"
+              linkLabel="Monitor Now"
+              delay="0.3s"
+            />
+            <FeatureCard
+              icon={TrendingUp}
+              title="Analytics & Insights"
+              description="Deep-dive charts and time-series analysis on deforestation rate, biodiversity index, and conflict frequency — exportable as PDF."
+              link="/analytics"
+              linkLabel="View Analytics"
+              delay="0.4s"
+            />
+            <FeatureCard
+              icon={BookOpen}
+              title="Learn & Awareness"
+              description="Curated educational resources, species guides, and conservation best-practices for students, NGOs, and policy makers alike."
+              link="/learn"
+              linkLabel="Start Learning"
+              delay="0.5s"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════ MAP PREVIEW / HOW IT WORKS ══════════ */}
+      <section className="how-section">
+        <div className="section-container how-inner">
+          <div className="how-text">
+            <span className="section-eyebrow">How It Works</span>
+            <h2 className="section-title left">Three Steps to Conservation</h2>
+            <div className="steps">
+              {[
+                { num: '01', title: 'Satellite Ingestion', desc: 'NASA MODIS & Sentinel-2 imagery is processed nightly to detect land-cover change.' },
+                { num: '02', title: 'AI Alert Engine',    desc: 'Machine-learning models flag deforestation events and predict wildlife movement corridors.' },
+                { num: '03', title: 'Community Action',  desc: 'Rangers, locals, and NGOs receive instant alerts and can submit ground-truth reports.' },
+              ].map(s => (
+                <div className="step" key={s.num}>
+                  <span className="step-num">{s.num}</span>
+                  <div>
+                    <h4>{s.title}</h4>
+                    <p>{s.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Link to="/dashboard" className="btn btn-primary inline-btn">
+              Explore Live Map <ArrowRight size={18} />
+            </Link>
+          </div>
+
+          <div className="map-preview-wrap">
+            <div className="map-preview-card">
+              <div className="map-preview-header">
+                <span className="map-dot red" /><span className="map-dot yellow" /><span className="map-dot green" />
+                <span className="map-title-tag">BioGuard · Live Map</span>
+                <span className="live-badge"><span className="pulse-ring" /> LIVE</span>
+              </div>
+              <div className="map-preview-body">
+                {/* Simulated map visual */}
+                <div className="fake-map">
+                  <div className="fake-forest zone1" />
+                  <div className="fake-forest zone2" />
+                  <div className="fake-forest zone3" />
+                  <div className="fake-river" />
+                  <div className="fake-alert fa1"><AlertTriangle size={12} /></div>
+                  <div className="fake-alert fa2"><AlertTriangle size={12} /></div>
+                  <div className="fake-ping fp1" />
+                  <div className="fake-ping fp2" />
+                  <div className="map-grid-overlay" />
+                </div>
+                <div className="map-legend">
+                  <span className="legend-item"><span className="legend-dot" style={{background:'#4CAF50'}} /> Forest Cover</span>
+                  <span className="legend-item"><span className="legend-dot" style={{background:'#fb8c00'}} /> Alert Zone</span>
+                  <span className="legend-item"><span className="legend-dot" style={{background:'#e53935'}} /> Critical</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════ IMPACT SECTION ══════════ */}
+      <section className={`impact-section ${impactInView ? 'animate-in' : ''}`} ref={impactRef}>
+        <div className="section-container">
+          <div className="section-header light">
+            <span className="section-eyebrow light">Our Impact</span>
+            <h2 className="section-title light">Measurable Conservation Results</h2>
+          </div>
+          <div className="impact-grid">
+            {[
+              { value: '34%', label: 'Reduction in repeat conflict incidents in monitored zones' },
+              { value: '2.1M', label: 'Hectares of forest under active satellite surveillance' },
+              { value: '6 min', label: 'Average time from detection to alert dispatch' },
+              { value: '42+',  label: 'Partner NGOs and forest departments using BioGuard' },
+            ].map(item => (
+              <div className="impact-card" key={item.value}>
+                <div className="impact-value">{item.value}</div>
+                <div className="impact-label">{item.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════ CTA SECTION ══════════ */}
+      <section className="cta-section">
+        <div className="cta-content">
+          <TreePine size={48} className="cta-icon" />
+          <h2>Join the Conservation Network</h2>
+          <p>
+            Whether you're a ranger, researcher, NGO, or a concerned citizen —
+            your eyes on the ground can make a difference.
+          </p>
+          <div className="cta-buttons">
+            <Link to="/report" className="btn btn-primary" id="cta-report-btn">
+              Report an Incident
+            </Link>
+            <Link to="/learn" className="btn btn-outline" id="cta-learn-btn">
+              Learn More
+            </Link>
+          </div>
+        </div>
+        <div className="cta-bg-shapes">
+          <span className="cta-shape s1" />
+          <span className="cta-shape s2" />
+          <span className="cta-shape s3" />
+        </div>
+      </section>
+
+    </div>
+  );
+};
+
+export default Home;

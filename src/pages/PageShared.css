@@ -1,0 +1,178 @@
+/* ══════════════════════════════════════════════════
+   SHARED PAGE STYLES — imported via index.css
+   ══════════════════════════════════════════════════ */
+
+.page-root {
+  min-height: 100vh;
+  padding-top: 100px;
+  padding-bottom: 60px;
+  background: var(--bg-page);
+  transition: background 0.35s ease;
+}
+
+/* ── Page header ── */
+.page-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 32px 32px 24px;
+}
+.page-title {
+  font-size: 1.9rem;
+  font-weight: 800;
+  color: var(--text-heading);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.page-sub {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Live indicator ── */
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(229,57,53,0.1);
+  color: #e53935;
+  padding: 6px 14px;
+  border-radius: 50px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border: 1px solid rgba(229,57,53,0.3);
+}
+.live-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #e53935;
+  animation: blink 1.2s ease infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── Icon button ── */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-sub);
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+.icon-btn:hover,
+.icon-btn.active {
+  background: #1a472a;
+  color: #fff;
+  border-color: #1a472a;
+}
+
+/* ── Panel ── */
+.panel {
+  background: var(--bg-card);
+  border-radius: 16px;
+  margin: 0 32px 24px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  transition: background 0.35s ease, border-color 0.35s ease;
+}
+.panel-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-light);
+}
+.panel-hdr h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-heading);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.panel-tag { font-size: 0.75rem; color: var(--text-muted); }
+.panel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4CAF50;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: gap 0.2s;
+}
+.panel-link:hover { gap: 8px; }
+
+/* ── Severity badges ── */
+.sev-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sev-badge.critical { background: rgba(229,57,53,0.15);  color: #e53935; }
+.sev-badge.warning  { background: rgba(251,140,0,0.15);  color: #fb8c00; }
+.sev-badge.info     { background: rgba(25,118,210,0.15); color: #1976d2; }
+.sev-badge.big      { font-size: 0.78rem; padding: 4px 12px; }
+
+/* ── Status badge ── */
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.status-badge.active   { background: rgba(229,57,53,0.12); color: #e53935; }
+.status-badge.resolved { background: rgba(76,175,80,0.12); color: #4CAF50; }
+.status-badge.big      { font-size: 0.78rem; padding: 4px 12px; }
+
+/* ── Filter select ── */
+.filter-select {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--input-border);
+  background: var(--bg-card);
+  color: var(--text-body);
+  font-size: 0.83rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s, background 0.35s;
+}
+.filter-select:focus { border-color: #4CAF50; }
+
+/* ── Map legend ── */
+.map-legend-row { display: flex; align-items: center; gap: 16px; }
+.leg-item { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: var(--text-muted); }
+.leg-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Responsive ── */
+@media (max-width: 700px) {
+  .page-header-bar { padding: 20px 16px 16px; }
+  .panel           { margin-left: 16px; margin-right: 16px; }
+}
+
