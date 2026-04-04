@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import {
   ShieldAlert, Map, Users, ChevronDown, Activity,
   TreePine, AlertTriangle, Globe, ArrowRight, Eye,
-  TrendingUp, Zap, BookOpen, BarChart2, CheckCircle
+  TrendingUp, Zap, BookOpen, BarChart2, CheckCircle,
+  MessageSquare, Star
 } from 'lucide-react';
 import './Home.css';
 
@@ -80,10 +81,52 @@ const Home = () => {
   const [featuresRef, featuresInView] = useInView(0.1);
   const [impactRef, impactInView] = useInView(0.1);
 
+  const [testimonials, setTestimonials] = useState([]);
+  const [tName, setTName] = useState('');
+  const [tRole, setTRole] = useState('');
+  const [tContent, setTContent] = useState('');
+  const [tRating, setTRating] = useState(5);
+  const [tMsg, setTMsg] = useState('');
+
   useEffect(() => {
     const t = setTimeout(() => setHeroVisible(true), 100);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    fetch(`${base.endsWith('/') ? base.slice(0, -1) : base}/api/testimonials`)
+      .then(res => res.json())
+      .then(data => setTestimonials(data.testimonials || []))
+      .catch(() => {});
+  }, []);
+
+  const handleTestimonialSubmit = async (e) => {
+    e.preventDefault();
+    if (!tName || !tRole || !tContent) {
+      setTMsg('Please fill all fields');
+      return;
+    }
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    try {
+      const res = await fetch(`${base.endsWith('/') ? base.slice(0, -1) : base}/api/testimonials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: tName, role: tRole, content: tContent, rating: tRating })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setTestimonials([json.testimonial, ...testimonials]);
+        setTName(''); setTRole(''); setTContent(''); setTRating(5);
+        setTMsg('Thank you for your review!');
+        setTimeout(() => setTMsg(''), 3000);
+      } else {
+        setTMsg('Failed to submit review');
+      }
+    } catch {
+      setTMsg('Error submitting review');
+    }
+  };
 
   const scrollToFeatures = () => {
     document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
@@ -309,6 +352,71 @@ const Home = () => {
                 <div className="impact-label">{item.label}</div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════ TESTIMONIALS SECTION ══════════ */}
+      <section className="testimonials-section" style={{ padding: '80px 5%', background: '#0a0c10' }}>
+        <div className="section-container">
+          <div className="section-header">
+            <span className="section-eyebrow" style={{ color: '#4CAF50' }}>Community & Users</span>
+            <h2 className="section-title">What People Say</h2>
+            <p className="section-subtitle">Real experiences from field workers, conservationists, and citizens.</p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: '40px', alignItems: 'start' }}>
+            {/* Reviews List */}
+            <div style={{ display: 'grid', gap: '20px', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+              {testimonials.map(t => (
+                <div key={t._id} style={{ 
+                  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+                  padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', gap: '4px', color: '#ffb300' }}>
+                    {[...Array(5)].map((_, i) => <Star key={i} size={16} fill={i < t.rating ? 'currentColor' : 'none'} color={i < t.rating ? 'currentColor' : '#444'} />)}
+                  </div>
+                  <p style={{ fontSize: '0.95rem', color: '#ccc', lineHeight: 1.6, fontStyle: 'italic', flex: 1 }}>"{t.content}"</p>
+                  <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px' }}>
+                    <div style={{ fontWeight: 700, color: '#fff' }}>{t.name}</div>
+                    <div style={{ fontSize: '0.8rem', color: '#888' }}>{t.role}</div>
+                  </div>
+                </div>
+              ))}
+              {testimonials.length === 0 && <div style={{ color: '#666' }}>No reviews yet. Be the first to share your experience!</div>}
+            </div>
+
+            {/* Submit Review Form */}
+            <div style={{ 
+              background: '#13151a', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '16px',
+              position: 'sticky', top: '100px'
+            }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem', marginBottom: '20px', color: '#fff' }}>
+                <MessageSquare size={20} color="#4CAF50" /> Add Your Review
+              </h3>
+              <form onSubmit={handleTestimonialSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <input value={tName} onChange={e=>setTName(e.target.value)} placeholder="Your Name" required
+                  style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }} />
+                <input value={tRole} onChange={e=>setTRole(e.target.value)} placeholder="Your Role (e.g. Forest Ranger)" required
+                  style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }} />
+                <textarea value={tContent} onChange={e=>setTContent(e.target.value)} placeholder="Share your experience..." required rows={4}
+                  style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', resize: 'vertical' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '0.85rem', color: '#aaa' }}>Rating:</span>
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} size={20} onClick={() => setTRating(i+1)} style={{ cursor: 'pointer' }}
+                      fill={i < tRating ? '#ffb300' : 'none'} color={i < tRating ? '#ffb300' : '#666'} />
+                  ))}
+                </div>
+                {tMsg && <div style={{ fontSize: '0.85rem', color: tMsg.includes('Thank') ? '#4CAF50' : '#ff5252', background: tMsg.includes('Thank') ? 'rgba(76,175,80,0.1)' : 'rgba(255,82,82,0.1)', padding: '8px', borderRadius: '6px' }}>{tMsg}</div>}
+                <button type="submit" style={{ 
+                  background: '#4CAF50', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer',
+                  transition: 'background 0.2s'
+                }} onMouseOver={e=>e.target.style.background='#45a049'} onMouseOut={e=>e.target.style.background='#4CAF50'}>
+                  Submit Review
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </section>
