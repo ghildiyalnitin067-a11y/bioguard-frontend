@@ -66,15 +66,7 @@ const FeatureCard = ({ icon: Icon, title, description, link, linkLabel, delay })
 );
 
 /* ─── Alert ticker item ─── */
-const alerts = [
-  { type: 'danger',  label: 'CRITICAL', text: 'Elephant herd spotted 2km from Bandipur settlement' },
-  { type: 'warning', label: 'WARNING', text: 'Illegal logging detected · Sector 7, Western Ghats' },
-  { type: 'info',    label: 'INFO',    text: 'Forest fire alert cleared · Nagarhole Zone B' },
-  { type: 'danger',  label: 'CRITICAL', text: 'Tiger sighting reported near NH-67 corridor' },
-  { type: 'warning', label: 'WARNING', text: 'Deforestation index rising · Arunachal buffer zone' },
-];
 
-/* ─── Main component ─── */
 const Home = () => {
   const [heroVisible, setHeroVisible] = useState(false);
   const [tickerPaused, setTickerPaused] = useState(false);
@@ -88,6 +80,10 @@ const Home = () => {
   const [tRating, setTRating] = useState(5);
   const [tMsg, setTMsg] = useState('');
   const [showReviewModal, setShowReviewModal] = useState(false);
+  
+  // Real-time alerts state
+  const [alerts, setAlerts] = useState([]);
+  const wsRef = useRef(null);
 
   useEffect(() => {
     const t = setTimeout(() => setHeroVisible(true), 100);
@@ -100,6 +96,61 @@ const Home = () => {
       .then(res => res.json())
       .then(data => setTestimonials(data.testimonials || []))
       .catch(() => {});
+  }, []);
+
+  /* ── Fetch Real-time Alerts ── */
+  const fetchAlerts = React.useCallback(async () => {
+    try {
+      const base = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+      const res = await fetch(`${base.endsWith('/') ? base.slice(0, -1) : base}/api/alerts?limit=15`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.alerts?.length) {
+          setAlerts(prev => {
+            const wsOnly = prev.filter(a => a._live && !json.alerts.find(x => x._id === a._id));
+            return [...wsOnly, ...json.alerts];
+          });
+        }
+      }
+    } catch (e) { console.error('[Home] Failed to fetch live alerts', e); }
+  }, []);
+
+  useEffect(() => {
+    fetchAlerts();
+    const t1 = setInterval(fetchAlerts, 5 * 60 * 1000); // Poll every 5 minutes in background
+    return () => clearInterval(t1);
+  }, [fetchAlerts]);
+
+  /* ── Live WebSocket for Ticker ── */
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    const WS_URL  = API_URL.replace(/^http/, 'ws');
+    const connect = () => {
+      try {
+        wsRef.current = new WebSocket(WS_URL);
+        wsRef.current.onclose = () => setTimeout(connect, 5000);
+        wsRef.current.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data);
+            if (msg.event === 'new_alert') {
+              const a = { ...msg.data, _id: msg.data._id || msg.data.id, _live: true };
+              setAlerts(prev => (prev.find(x => x._id === a._id) ? prev : [a, ...prev.slice(0, 14)]));
+            }
+            if (msg.event === 'realtime_alert_batch' && msg.data?.alerts) {
+              const batch = msg.data.alerts.map(a => ({
+                ...a, _id: a._id || a.id || `rt-${Date.now()}-${Math.random()}`, _live: true
+              }));
+              setAlerts(prev => {
+                const newOnes = batch.filter(a => !prev.find(x => x._id === a._id));
+                return newOnes.length > 0 ? [...newOnes, ...prev].slice(0, 15) : prev;
+              });
+            }
+          } catch (_) {}
+        };
+      } catch (_) {}
+    };
+    connect();
+    return () => { if (wsRef.current) wsRef.current.close(); };
   }, []);
 
   const handleTestimonialSubmit = async (e) => {
@@ -148,12 +199,22 @@ const Home = () => {
         <span className="ticker-label"><Zap size={14} /> LIVE ALERTS</span>
         <div className="ticker-track-wrapper">
           <div className={`ticker-track ${tickerPaused ? 'paused' : ''}`}>
-            {[...alerts, ...alerts].map((a, i) => (
-              <span key={i} className={`ticker-item ticker-${a.type}`}>
-                <span className="ticker-badge">{a.label}</span> {a.text}
-                <span className="ticker-sep">  •  </span>
+            {[...alerts, ...alerts].map((a, i) => {
+              const severityType = a.severity === 'critical' ? 'danger' : a.severity === 'warning' ? 'warning' : 'info';
+              const label = a.severity ? a.severity.toUpperCase() : 'INFO';
+              const text = a.headline || a.description || `${a.type} Alert in ${a.location}`;
+              return (
+                <span key={i} className={`ticker-item ticker-${severityType}`}>
+                  <span className="ticker-badge">{label}</span> {text}
+                  <span className="ticker-sep">  •  </span>
+                </span>
+              );
+            })}
+            {alerts.length === 0 && (
+              <span className="ticker-item ticker-info">
+                <span className="ticker-badge">INFO</span> Connected to live real-time network... Waiting for updates.
               </span>
-            ))}
+            )}
           </div>
         </div>
       </div>
