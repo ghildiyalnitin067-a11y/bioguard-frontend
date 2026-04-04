@@ -4,8 +4,9 @@ import {
   ShieldAlert, Map, Users, ChevronDown, Activity,
   TreePine, AlertTriangle, Globe, ArrowRight, Eye,
   TrendingUp, Zap, BookOpen, BarChart2, CheckCircle,
-  MessageSquare, Star
+  MessageSquare, Star, Trash2
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import './Home.css';
 
 /* ─── Animated counter hook ─── */
@@ -68,6 +69,8 @@ const FeatureCard = ({ icon: Icon, title, description, link, linkLabel, delay })
 /* ─── Alert ticker item ─── */
 
 const Home = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [heroVisible, setHeroVisible] = useState(false);
   const [tickerPaused, setTickerPaused] = useState(false);
   const [featuresRef, featuresInView] = useInView(0.1);
@@ -180,6 +183,25 @@ const Home = () => {
       }
     } catch {
       setTMsg('Error submitting review');
+    }
+  };
+
+  const handleDeleteTestimonial = async (id) => {
+    if (!window.confirm('Delete this testimonial?')) return;
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+    try {
+      const token = localStorage.getItem('bioguard-jwt');
+      const res = await fetch(`${base.endsWith('/') ? base.slice(0, -1) : base}/api/testimonials/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setTestimonials(prev => prev.filter(t => t._id !== id));
+      } else {
+        alert('Failed to delete review');
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -439,7 +461,16 @@ const Home = () => {
 
           <div className="testimonials-track">
             {testimonials.map(t => (
-              <div key={t._id} className="testimonial-card">
+              <div key={t._id} className="testimonial-card" style={{ position: 'relative' }}>
+                {isAdmin && (
+                  <button 
+                    onClick={() => handleDeleteTestimonial(t._id)}
+                    style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', color: '#ff5252', cursor: 'pointer', opacity: 0.8 }}
+                    title="Delete Testimonial"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
                 <div style={{ display: 'flex', gap: '4px', color: '#fb8c00' }}>
                   {[...Array(5)].map((_, i) => <Star key={i} size={18} fill={i < t.rating ? 'currentColor' : 'none'} color={i < t.rating ? 'currentColor' : '#ddd'} />)}
                 </div>
