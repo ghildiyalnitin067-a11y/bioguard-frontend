@@ -152,7 +152,7 @@ const Dashboard = () => {
             /* ── Batch real-time alerts (GBIF/GFW/satellite) ── */
             if (msg.event === 'realtime_alert_batch' && msg.data?.alerts) {
               const batch = msg.data.alerts.map(a => ({
-                ...a, _id: a.id || `rt-${Date.now()}-${Math.random()}`,
+                ...a, _id: a._id || a.id || `rt-${Date.now()}-${Math.random()}`,
                 _live: true, _liveAt: Date.now(), source: a.source || 'system',
               }));
               setLiveAlerts(prev => {

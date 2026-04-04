@@ -669,7 +669,7 @@ const Alerts = () => {
             /* ── Real-Time GBIF/GFW/Satellite batch ── */
             if (msg.event === 'realtime_alert_batch' && msg.data?.alerts) {
               const batch = msg.data.alerts.map(a => ({
-                ...a, _id: a.id || `rt-${Date.now()}-${Math.random()}`,
+                ...a, _id: a._id || a.id || `rt-${Date.now()}-${Math.random()}`,
                 _live: true, source: 'system',
               }));
               setAlerts(prev => {
