@@ -23,15 +23,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-/* ── Static fallback data (shown when API is unavailable) ── */
-const STATIC_ALERTS = [
-  { _id: 's1', type: 'Wildlife',      severity: 'critical', state: 'Assam',            location: 'Kaziranga NP, Assam',          coordinates:{ lat:26.57,lng:93.17 }, createdAt: new Date(Date.now()-3*60000).toISOString(),  status:'active',   description:'One-horned rhino strayed 2 km beyond sanctuary boundary near Bokakhat highway.', action:'Rangers dispatched' },
-  { _id: 's2', type: 'Deforestation', severity: 'critical', state: 'Arunachal Pradesh', location: 'Namdapha NP, Arunachal Pradesh',coordinates:{ lat:27.55,lng:96.38 }, createdAt: new Date(Date.now()-19*60000).toISOString(), status:'active',   description:'Satellite imagery confirms ~5.4 ha clearing in core tiger corridor.', action:'DFO notified' },
-  { _id: 's3', type: 'Wildfire',      severity: 'warning',  state: 'Assam',            location: 'Manas NP buffer, Assam',       coordinates:{ lat:26.69,lng:90.97 }, createdAt: new Date(Date.now()-34*60000).toISOString(), status:'active',   description:'Grassland fire spreading eastwards; 3.1 ha affected.', action:'Forest dept. alerted' },
-  { _id: 's4', type: 'Poaching',      severity: 'critical', state: 'Manipur',          location: 'Keibul Lamjao NP, Manipur',    coordinates:{ lat:24.53,lng:93.88 }, createdAt: new Date(Date.now()-52*60000).toISOString(), status:'active',   description:'Snare network discovered near Loktak Lake phumdi meadows.', action:'Wildlife Crime Unit active' },
-  { _id: 's5', type: 'Conflict',      severity: 'warning',  state: 'Meghalaya',        location: 'Nokrek NP, Meghalaya',         coordinates:{ lat:25.46,lng:90.42 }, createdAt: new Date(Date.now()-3600000).toISOString(),  status:'active',   description:'Red panda sighting 800 m from Garo Hills village — community alert issued.', action:'Community watch active' },
-  { _id: 's6', type: 'Deforestation', severity: 'warning',  state: 'Nagaland',         location: 'Dzukou Valley, Nagaland',      coordinates:{ lat:25.54,lng:94.03 }, createdAt: new Date(Date.now()-7200000).toISOString(),  status:'resolved', description:'Slash-and-burn expanding on eastern ridge.', action:'Monitoring' },
-];
 
 const BASE = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
 const API  = `${BASE}/api`;
@@ -418,15 +409,11 @@ function CreateAlertModal({ onClose, onCreated, userRole }) {
         type:        form.type,
         severity:    form.severity,
         location:    form.location.trim(),
-        state:       form.state.trim(),
+        state:       form.state.trim() || 'Assam',
         description: form.description.trim(),
         action:      form.action.trim(),
-        status:      'active',
-        source:      userRole === 'admin' ? 'admin' : 'asha_worker',
-        notificationType: 'field_report',
-        coordinates: form.lat && form.lng
-          ? { lat: parseFloat(form.lat), lng: parseFloat(form.lng) }
-          : { lat: 26.2, lng: 93.0 },
+        lat:         form.lat ? parseFloat(form.lat) : 26.2,
+        lng:         form.lng ? parseFloat(form.lng) : 93.0,
       };
       const res = await fetch(`${API}/alerts`, {
         method: 'POST',
@@ -591,7 +578,7 @@ const Alerts = () => {
   const { user } = useAuth();
   const canModerate = user?.role === 'admin' || user?.role === 'asha_worker';
   const [tab,        setTab]        = useState('alerts');   // 'alerts' | 'reports'
-  const [alerts,     setAlerts]     = useState(STATIC_ALERTS);
+  const [alerts,     setAlerts]     = useState([]);
   const [reports,    setReports]    = useState([]);
   const [rptLoad,    setRptLoad]    = useState(false);
   const [lightbox,   setLightbox]   = useState(null);
@@ -606,33 +593,35 @@ const Alerts = () => {
   const [selected,  setSelected]  = useState(null);
   const [showMap,   setShowMap]   = useState(false);
   const [actionMsg, setActionMsg] = useState('');
+  const [apiError,  setApiError]  = useState('');
 
-
+  /* ── Fetch from /api/alerts (DB alerts) ── */
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
+    setApiError('');
     try {
-      const res = await fetch(`${API}/alerts?limit=50`, {
+      const res = await fetch(`${API}/alerts?limit=100`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       if (res.ok) {
         const json = await res.json();
         if (json.alerts?.length) {
-          setAlerts(json.alerts);
-          setSelected(s => s ? (json.alerts.find(a => a._id === s._id) || null) : null);
-        } else {
-          setAlerts(STATIC_ALERTS);
-          setSelected(s => s ? s : null);
+          setAlerts(prev => {
+            // Merge: keep any _live WS alerts not yet in DB, prepend DB alerts
+            const wsOnly = prev.filter(a => a._live && !json.alerts.find(x => x._id === a._id));
+            return [...wsOnly, ...json.alerts];
+          });
+          setSelected(s => s ? (json.alerts.find(a => a._id === s._id) || s) : null);
         }
       } else {
-        setAlerts(STATIC_ALERTS);
-        setSelected(s => s ? s : null);
+        setApiError('Could not reach backend — showing cached data.');
       }
     } catch {
-      setAlerts(STATIC_ALERTS);
-      setSelected(s => s ? s : null);
+      setApiError('Backend unreachable. Check your internet connection.');
     }
     setLoading(false);
   }, []);
+
 
   /* ── Fetch community reports (public) ── */
   const fetchReports = useCallback(async () => {
@@ -649,79 +638,93 @@ const Alerts = () => {
     setRptLoad(false);
   }, [user, canModerate]);
 
-  /* ── Live WebSocket — alerts + reports ── */
+  /* ── Live WebSocket — works for all users (no auth required) ── */
   useEffect(() => {
-    if (!user) return;
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
     const WS_URL  = API_URL.replace(/^http/, 'ws');
-    try {
-      wsRef.current = new WebSocket(WS_URL);
-      wsRef.current.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data);
+    const connect = () => {
+      try {
+        wsRef.current = new WebSocket(WS_URL);
+        wsRef.current.onclose = () => setTimeout(connect, 5000);
+        wsRef.current.onmessage = (e) => {
+          try {
+            const msg = JSON.parse(e.data);
 
-          /* ── Live alert broadcast ── */
-          if (msg.event === 'new_alert') {
-            const a = { ...msg.data, _id: msg.data._id || msg.data.id, _live: true };
-            setAlerts(prev => {
-              // avoid duplicates
-              if (prev.find(x => x._id === a._id)) return prev;
-              return [a, ...prev.slice(0, 49)];
-            });
-            setLiveCount(c => c + 1);
-            /* show in-app toast */
-            fireToast({
-              severity: a.severity,
-              text: `${a.type} Alert — ${a.location}`,
-              subtext: a.description?.slice(0, 90),
-              solutions: a.solutions,
-            });
-          }
+            /* ── Live alert broadcast ── */
+            if (msg.event === 'new_alert') {
+              const a = { ...msg.data, _id: msg.data._id || msg.data.id, _live: true };
+              setAlerts(prev => {
+                if (prev.find(x => x._id === a._id)) return prev;
+                return [a, ...prev.slice(0, 99)];
+              });
+              setLiveCount(c => c + 1);
+              fireToast({
+                severity: a.severity,
+                text: `${a.type} Alert — ${a.location}`,
+                subtext: a.description?.slice(0, 90),
+                solutions: a.solutions,
+              });
+            }
 
-          /* ── Real-Time GBIF/GFW/Satellite batch broadcast ── */
-          if (msg.event === 'realtime_alert_batch' && msg.data?.alerts) {
-            const liveData = msg.data.alerts.map(a => ({ 
-              ...a, _id: a.id || Date.now() + Math.random(), _live: true, source: 'system' 
-            }));
-            setAlerts(prev => {
-              // filter existing
-              const newAlerts = liveData.filter(la => !prev.find(x => x._id === la._id));
-              return [...newAlerts, ...prev].slice(0, 100);
-            });
-          }
+            /* ── Real-Time GBIF/GFW/Satellite batch ── */
+            if (msg.event === 'realtime_alert_batch' && msg.data?.alerts) {
+              const batch = msg.data.alerts.map(a => ({
+                ...a, _id: a.id || `rt-${Date.now()}-${Math.random()}`,
+                _live: true, source: 'system',
+              }));
+              setAlerts(prev => {
+                const newOnes = batch.filter(a => !prev.find(x => x._id === a._id));
+                return newOnes.length > 0 ? [...newOnes, ...prev].slice(0, 100) : prev;
+              });
+              setLiveCount(c => c + batch.length);
+            }
 
-          /* ── Critical Real-Time Intelligence ── */
-          if (msg.event === 'realtime_critical_alert') {
-            const a = msg.data;
-            fireToast({
-              severity: 'critical',
-              text: `🛰️ SATELLITE ALERT — ${a.location}`,
-              subtext: a.description?.slice(0, 90),
-              solutions: a.solutions || ['Avoid area immediately.'],
-            });
-          }
+            /* ── Critical satellite alert toast ── */
+            if (msg.event === 'realtime_critical_alert') {
+              const a = msg.data;
+              fireToast({
+                severity: 'critical',
+                text: `🛰️ SATELLITE ALERT — ${a.location}`,
+                subtext: a.description?.slice(0, 90),
+                solutions: a.solutions || ['Avoid area immediately.'],
+              });
+            }
 
-          /* ── Reports ── */
-          if (msg.event === 'new_report') {
-            const r = { ...msg.data, _id: msg.data.id, _live: true, createdAt: msg.data.timestamp };
-            setReports(prev => [r, ...prev.slice(0, 49)]);
-          }
-          if (msg.event === 'report_updated') {
-            setReports(prev => prev.map(r =>
-              r._id === msg.data.id ? { ...r, status: msg.data.status, riskLevel: msg.data.riskLevel } : r
-            ));
-          }
-        } catch (_) {}
-      };
-      wsRef.current.onerror = () => {};
-    } catch (_) {}
+            /* ── Reports ── */
+            if (msg.event === 'new_report') {
+              const r = { ...msg.data, _id: msg.data.id, _live: true, createdAt: msg.data.timestamp };
+              setReports(prev => [r, ...prev.slice(0, 49)]);
+              if (tab === 'reports') {
+                fireToast({
+                  kind: 'report',
+                  text: `New ${msg.data.type} report — ${msg.data.location}`,
+                  subtext: msg.data.description?.slice(0, 80),
+                  urgency: msg.data.urgency?.toLowerCase().includes('high') ? 'high' : 'medium',
+                  refId: msg.data.refId,
+                  previewImage: msg.data.previewImage,
+                  imageCount: msg.data.imageCount,
+                });
+              }
+            }
+            if (msg.event === 'report_updated') {
+              setReports(prev => prev.map(r =>
+                r._id === msg.data.id ? { ...r, status: msg.data.status, riskLevel: msg.data.riskLevel } : r
+              ));
+            }
+          } catch (_) {}
+        };
+        wsRef.current.onerror = () => {};
+      } catch (_) {}
+    };
+    connect();
     return () => { if (wsRef.current) wsRef.current.close(); };
-  }, [user]);
+  }, [tab]);
 
   useEffect(() => {
     fetchAlerts();
-    const t = setInterval(fetchAlerts, 60000);
-    return () => clearInterval(t);
+    // Refresh DB alerts every 5 minutes
+    const t1 = setInterval(fetchAlerts, 5 * 60 * 1000);
+    return () => clearInterval(t1);
   }, [fetchAlerts]);
 
   useEffect(() => {
@@ -828,6 +831,19 @@ const Alerts = () => {
           )}
         </div>
       </div>
+
+      {/* ── API error banner ── */}
+      {apiError && (
+        <div style={{
+          margin: '0 0 12px', padding: '10px 16px', borderRadius: 10,
+          background: 'rgba(255,193,7,0.1)', border: '1px solid rgba(255,193,7,0.3)',
+          color: '#ffc107', fontSize: '0.82rem', fontWeight: 600,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          ⚠️ {apiError}
+          <button onClick={() => setApiError('')} style={{ background:'none', border:'none', cursor:'pointer', color:'inherit' }}>✕</button>
+        </div>
+      )}
 
       {/* ── Tab switcher ── */}
       <div style={{ display:'flex', gap:2, marginBottom:16,
@@ -1004,20 +1020,35 @@ const Alerts = () => {
       <div className={`alerts-layout ${selected ? 'has-detail' : ''}`}>
         {/* Alert cards */}
         <div className="alerts-list-col">
-          {filtered.length === 0 && (
+          {filtered.length === 0 && !loading && (
             <div className="empty-state">
-              <CheckCircle size={40} /> <p>No alerts match the current filters.</p>
+              <CheckCircle size={40} />
+              <p>
+                {alerts.length === 0
+                  ? 'Connecting to backend… Alerts will appear shortly.'
+                  : 'No alerts match the current filters.'}
+              </p>
             </div>
           )}
 
           {/* Group: Real-Time Intelligence & Satellite */}
-          {filtered.filter(a => a.source === 'system' || !a.source).length > 0 && (
-            <div style={{ padding: '0 8px 8px', margin: '4px 0 8px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-              <h4 style={{ color: '#b0bec5', margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Zap size={14} color="#ffb74d"/> Real-Time Intelligence & Satellite Alerts
-              </h4>
-            </div>
-          )}
+          {(() => {
+            const sysAlerts = filtered.filter(a => a.source === 'system' || !a.source);
+            return sysAlerts.length > 0 && (
+              <>
+                <div style={{ padding: '8px 8px 10px', margin: '4px 0 10px', borderBottom: '1px solid rgba(255,183,77,0.2)', background: 'rgba(255,183,77,0.04)', borderRadius: '8px 8px 0 0' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <h4 style={{ color: '#ffb74d', margin: 0, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Zap size={13} color="#ffb74d"/> Real-Time Intelligence &amp; Satellite Alerts
+                    </h4>
+                    <span style={{ fontSize:'0.68rem', fontWeight:700, color:'#ffb74d', background:'rgba(255,183,77,0.15)', borderRadius:100, padding:'2px 8px' }}>
+                      {sysAlerts.length} alerts · GBIF · GFW · Satellite
+                    </span>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
           {filtered.filter(a => a.source === 'system' || !a.source).map(a => {
             const Icon = SEV_ICON[a.severity] || AlertTriangle;
             return (
@@ -1055,14 +1086,31 @@ const Alerts = () => {
             );
           })}
 
-          {/* Group: Field Patrols & Asha Workers */}
-          {filtered.filter(a => a.source === 'asha_worker' || a.source === 'admin').length > 0 && (
-            <div style={{ padding: '0 8px 8px', margin: '24px 0 8px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-              <h4 style={{ color: '#b0bec5', margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Users size={14} color="#64b5f6"/> Asha Worker & Field Patrol Alerts
-              </h4>
+          {/* Loading indicator inside list */}
+          {loading && alerts.length === 0 && (
+            <div style={{ textAlign:'center', padding: '32px 20px', color:'#555' }}>
+              <RefreshCw size={24} style={{ animation:'spin 1s linear infinite', marginBottom:8, display:'block', margin:'0 auto 12px' }}/>
+              <div style={{ fontSize:'0.82rem' }}>Fetching real alerts from backend…</div>
+              <div style={{ fontSize:'0.72rem', color:'#444', marginTop:4 }}>GBIF · GFW · Satellite · Field Patrol</div>
             </div>
           )}
+
+          {/* Group: Field Patrols & Asha Workers */}
+          {(() => {
+            const fieldAlerts = filtered.filter(a => a.source === 'asha_worker' || a.source === 'admin');
+            return fieldAlerts.length > 0 && (
+              <div style={{ padding: '8px 8px 10px', margin: '20px 0 10px', borderBottom: '1px solid rgba(100,181,246,0.2)', background: 'rgba(100,181,246,0.04)', borderRadius: '8px 8px 0 0' }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <h4 style={{ color: '#64b5f6', margin: 0, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Users size={13} color="#64b5f6"/> Asha Worker &amp; Field Patrol Alerts
+                  </h4>
+                  <span style={{ fontSize:'0.68rem', fontWeight:700, color:'#64b5f6', background:'rgba(100,181,246,0.15)', borderRadius:100, padding:'2px 8px' }}>
+                    {fieldAlerts.length} alerts · Field-Verified
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
           {filtered.filter(a => a.source === 'asha_worker' || a.source === 'admin').map(a => {
             const Icon = SEV_ICON[a.severity] || AlertTriangle;
             return (

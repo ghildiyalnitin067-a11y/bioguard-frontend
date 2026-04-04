@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AlertTriangle, TreePine, Flame, Crosshair, Camera,
   MapPin, Upload, CheckCircle, ChevronRight, ChevronLeft,
