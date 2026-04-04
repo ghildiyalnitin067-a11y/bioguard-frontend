@@ -609,7 +609,18 @@ const Alerts = () => {
           setAlerts(prev => {
             // Merge: keep any _live WS alerts not yet in DB, prepend DB alerts
             const wsOnly = prev.filter(a => a._live && !json.alerts.find(x => x._id === a._id));
-            return [...wsOnly, ...json.alerts];
+            const merged = [...wsOnly, ...json.alerts];
+            // Deduplicate by externalRef or _id for existing DB duplicates
+            const unique = [];
+            const seen = new Set();
+            for (const a of merged) {
+              const key = a.externalRef || a._id;
+              if (!seen.has(key)) {
+                seen.add(key);
+                unique.push(a);
+              }
+            }
+            return unique;
           });
           setSelected(s => s ? (json.alerts.find(a => a._id === s._id) || s) : null);
         }
@@ -654,7 +665,7 @@ const Alerts = () => {
             if (msg.event === 'new_alert') {
               const a = { ...msg.data, _id: msg.data._id || msg.data.id, _live: true };
               setAlerts(prev => {
-                if (prev.find(x => x._id === a._id)) return prev;
+                if (prev.find(x => (x._id === a._id) || (a.externalRef && x.externalRef === a.externalRef))) return prev;
                 return [a, ...prev.slice(0, 99)];
               });
               setLiveCount(c => c + 1);
@@ -673,7 +684,7 @@ const Alerts = () => {
                 _live: true, source: 'system',
               }));
               setAlerts(prev => {
-                const newOnes = batch.filter(a => !prev.find(x => x._id === a._id));
+                const newOnes = batch.filter(a => !prev.find(x => (x._id === a._id) || (a.externalRef && x.externalRef === a.externalRef)));
                 return newOnes.length > 0 ? [...newOnes, ...prev].slice(0, 100) : prev;
               });
               setLiveCount(c => c + batch.length);
