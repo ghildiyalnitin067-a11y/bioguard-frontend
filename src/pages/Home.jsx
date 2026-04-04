@@ -87,6 +87,7 @@ const Home = () => {
   const [tContent, setTContent] = useState('');
   const [tRating, setTRating] = useState(5);
   const [tMsg, setTMsg] = useState('');
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setHeroVisible(true), 100);
@@ -119,7 +120,10 @@ const Home = () => {
         setTestimonials([json.testimonial, ...testimonials]);
         setTName(''); setTRole(''); setTContent(''); setTRating(5);
         setTMsg('Thank you for your review!');
-        setTimeout(() => setTMsg(''), 3000);
+        setTimeout(() => {
+          setTMsg('');
+          setShowReviewModal(false);
+        }, 1500);
       } else {
         setTMsg('Failed to submit review');
       }
@@ -356,70 +360,69 @@ const Home = () => {
         </div>
       </section>
 
-      {/* ══════════ TESTIMONIALS SECTION ══════════ */}
-      <section className="testimonials-section" style={{ padding: '80px 5%', background: '#0a0c10' }}>
+      {/* ══════════════════════════════════════════
+          TESTIMONIALS SECTION
+      ══════════════════════════════════════════ */}
+      <section className="testimonials-section">
         <div className="section-container">
-          <div className="section-header">
-            <span className="section-eyebrow" style={{ color: '#4CAF50' }}>Community & Users</span>
-            <h2 className="section-title">What People Say</h2>
-            <p className="section-subtitle">Real experiences from field workers, conservationists, and citizens.</p>
+          <div className="section-header" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: '20px', marginBottom: '40px' }}>
+            <div style={{ textAlign: 'left' }}>
+              <span className="section-eyebrow">Community & Users</span>
+              <h2 className="section-title left" style={{ margin: 0 }}>What People Say</h2>
+              <p className="section-subtitle" style={{ margin: '8px 0 0', maxWidth: '500px' }}>Real experiences from field workers, conservationists, and citizens.</p>
+            </div>
+            <button onClick={() => setShowReviewModal(true)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MessageSquare size={18} /> Write a Review
+            </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: '40px', alignItems: 'start' }}>
-            {/* Reviews List */}
-            <div style={{ display: 'grid', gap: '20px', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-              {testimonials.map(t => (
-                <div key={t._id} style={{ 
-                  background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
-                  padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '12px'
-                }}>
-                  <div style={{ display: 'flex', gap: '4px', color: '#ffb300' }}>
-                    {[...Array(5)].map((_, i) => <Star key={i} size={16} fill={i < t.rating ? 'currentColor' : 'none'} color={i < t.rating ? 'currentColor' : '#444'} />)}
-                  </div>
-                  <p style={{ fontSize: '0.95rem', color: '#ccc', lineHeight: 1.6, fontStyle: 'italic', flex: 1 }}>"{t.content}"</p>
-                  <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px' }}>
-                    <div style={{ fontWeight: 700, color: '#fff' }}>{t.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: '#888' }}>{t.role}</div>
-                  </div>
+          <div className="testimonials-track">
+            {testimonials.map(t => (
+              <div key={t._id} className="testimonial-card">
+                <div style={{ display: 'flex', gap: '4px', color: '#fb8c00' }}>
+                  {[...Array(5)].map((_, i) => <Star key={i} size={18} fill={i < t.rating ? 'currentColor' : 'none'} color={i < t.rating ? 'currentColor' : '#ddd'} />)}
                 </div>
-              ))}
-              {testimonials.length === 0 && <div style={{ color: '#666' }}>No reviews yet. Be the first to share your experience!</div>}
-            </div>
-
-            {/* Submit Review Form */}
-            <div style={{ 
-              background: '#13151a', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '16px',
-              position: 'sticky', top: '100px'
-            }}>
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem', marginBottom: '20px', color: '#fff' }}>
-                <MessageSquare size={20} color="#4CAF50" /> Add Your Review
-              </h3>
-              <form onSubmit={handleTestimonialSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <input value={tName} onChange={e=>setTName(e.target.value)} placeholder="Your Name" required
-                  style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }} />
-                <input value={tRole} onChange={e=>setTRole(e.target.value)} placeholder="Your Role (e.g. Forest Ranger)" required
-                  style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }} />
-                <textarea value={tContent} onChange={e=>setTContent(e.target.value)} placeholder="Share your experience..." required rows={4}
-                  style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', resize: 'vertical' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '0.85rem', color: '#aaa' }}>Rating:</span>
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} size={20} onClick={() => setTRating(i+1)} style={{ cursor: 'pointer' }}
-                      fill={i < tRating ? '#ffb300' : 'none'} color={i < tRating ? '#ffb300' : '#666'} />
-                  ))}
+                <p className="testimonial-text">"{t.content}"</p>
+                <div className="testimonial-author-wrap">
+                  <div className="testimonial-author">{t.name}</div>
+                  <div className="testimonial-author-role">{t.role}</div>
                 </div>
-                {tMsg && <div style={{ fontSize: '0.85rem', color: tMsg.includes('Thank') ? '#4CAF50' : '#ff5252', background: tMsg.includes('Thank') ? 'rgba(76,175,80,0.1)' : 'rgba(255,82,82,0.1)', padding: '8px', borderRadius: '6px' }}>{tMsg}</div>}
-                <button type="submit" style={{ 
-                  background: '#4CAF50', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer',
-                  transition: 'background 0.2s'
-                }} onMouseOver={e=>e.target.style.background='#45a049'} onMouseOut={e=>e.target.style.background='#4CAF50'}>
-                  Submit Review
-                </button>
-              </form>
-            </div>
+              </div>
+            ))}
+            {testimonials.length === 0 && <div style={{ color: '#666', padding: '20px 0' }}>No reviews yet. Be the first to share your experience!</div>}
           </div>
         </div>
       </section>
+
+      {/* ══════════ REVIEW MODAL ══════════ */}
+      {showReviewModal && (
+        <div className="review-modal-overlay" onClick={() => setShowReviewModal(false)}>
+          <div className="review-modal-content" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h3 className="review-modal-title">
+                <MessageSquare size={24} color="#4CAF50" /> Add Your Review
+              </h3>
+              <button className="review-modal-close" onClick={() => setShowReviewModal(false)}>&times;</button>
+            </div>
+            <form onSubmit={handleTestimonialSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <input className="review-input" value={tName} onChange={e=>setTName(e.target.value)} placeholder="Your Name" required />
+              <input className="review-input" value={tRole} onChange={e=>setTRole(e.target.value)} placeholder="Your Role (e.g. Forest Ranger)" required />
+              <textarea className="review-input" value={tContent} onChange={e=>setTContent(e.target.value)} placeholder="Share your experience..." required rows={4} style={{ resize: 'vertical' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
+                <span style={{ fontSize: '0.95rem', color: '#666', fontWeight: 600 }}>Rating:</span>
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} size={26} onClick={() => setTRating(i+1)} style={{ cursor: 'pointer', transition: 'transform 0.1s' }} onMouseDown={e=>e.currentTarget.style.transform='scale(0.9)'} onMouseUp={e=>e.currentTarget.style.transform='scale(1)'}
+                    fill={i < tRating ? '#fb8c00' : 'none'} color={i < tRating ? '#fb8c00' : '#ddd'} />
+                ))}
+              </div>
+              {tMsg && <div style={{ fontSize: '0.9rem', color: tMsg.includes('Thank') ? '#2e7d32' : '#c62828', background: tMsg.includes('Thank') ? '#e8f5e9' : '#ffebee', padding: '12px', borderRadius: '8px', fontWeight: 500 }}>{tMsg}</div>}
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '12px' }}>
+                Submit Review
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ══════════ CTA SECTION ══════════ */}
       <section className="cta-section">

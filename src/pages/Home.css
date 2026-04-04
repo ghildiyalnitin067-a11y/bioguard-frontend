@@ -751,6 +751,128 @@
 .s2 { width: 400px; height: 400px; bottom: -150px; right: -100px; }
 .s3 { width: 300px; height: 300px; top: 50%; left: 50%; transform: translate(-50%,-50%); }
 
+/* ═══════════════════════════════════════════════
+   TESTIMONIALS SECTION
+   ═══════════════════════════════════════════════ */
+.testimonials-section {
+  padding: 100px 20px;
+  background: #fff;
+}
+.testimonials-track {
+  display: flex;
+  gap: 28px;
+  overflow-x: auto;
+  padding-bottom: 30px;
+  scroll-snap-type: x mandatory;
+}
+.testimonials-track::-webkit-scrollbar { display: none; }
+.testimonials-track { scrollbar-width: none; }
+
+.testimonial-card {
+  background: #f7faf8;
+  border-radius: 20px;
+  padding: 40px 32px;
+  border: 1px solid rgba(0,0,0,0.04);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.03);
+  min-width: 340px;
+  max-width: 380px;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
+}
+.testimonial-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 50px rgba(45,90,39,0.1);
+  border-color: rgba(76,175,80,0.25);
+  background: #fff;
+}
+.testimonial-text {
+  font-size: 1rem;
+  color: #666;
+  line-height: 1.65;
+  font-style: italic;
+  flex: 1;
+  margin: 0;
+}
+.testimonial-author-wrap {
+  margin-top: auto;
+  border-top: 1px solid rgba(0,0,0,0.06);
+  padding-top: 20px;
+}
+.testimonial-author {
+  font-weight: 700;
+  color: #1a472a;
+  font-size: 1.1rem;
+}
+.testimonial-author-role {
+  font-size: 0.85rem;
+  color: #888;
+  margin-top: 4px;
+}
+
+/* Modal styles for reviews */
+.review-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.review-modal-content {
+  background: #fff;
+  padding: 40px;
+  border-radius: 24px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.2);
+}
+.review-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 1.35rem;
+  color: #1a472a;
+  font-weight: 800;
+  margin: 0;
+}
+.review-modal-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1.8rem;
+  cursor: pointer;
+  line-height: 1;
+  border-radius: 50%;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s;
+}
+.review-modal-close:hover { background: #f0f0f0; color: #333; }
+.review-input {
+  width: 100%;
+  padding: 14px 18px;
+  background: #f7faf8;
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 12px;
+  color: #1a472a;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.3s;
+}
+.review-input:focus {
+  outline: none;
+  border-color: #4CAF50;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(76,175,80,0.15);
+}
+
 /* ══════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════ */
